@@ -23,6 +23,7 @@ vendor/
 # IDE and editor files
 .idea/
 .vscode/
+.kiro/
 *.swp
 *.swo
 *~
