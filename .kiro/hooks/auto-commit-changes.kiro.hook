@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Auto Commit Changes",
+  "description": "Commits all changes with a short, human commit message in present tense, imperative mood (e.g., \"add yaml parser\", \"fix diff bug\") after completing a task.",
+  "version": "1",
+  "when": {
+    "type": "agentEnd"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review the changes made during this session and commit all staged and unstaged changes with a short, descriptive commit message. Use present tense, imperative mood (e.g., \"add yaml parser\", \"fix diff bug\"). Keep the message concise and human-readable. Run `git add -A` first, then `git commit -m \"your message\"`."
+  }
+}
