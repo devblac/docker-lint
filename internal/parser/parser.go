@@ -852,3 +852,11 @@ func ParseString(s string) (*ast.Dockerfile, error) {
 	p := NewParser(strings.NewReader(s))
 	return p.Parse(strings.NewReader(s))
 }
+
+// ParseReader is a convenience function to parse a Dockerfile from an io.Reader.
+func ParseReader(r io.Reader) (*ast.Dockerfile, error) {
+	p := &Parser{
+		inlineIgnores: make(map[int][]string),
+	}
+	return p.Parse(r)
+}
