@@ -1,0 +1,13 @@
+# ARG before FROM (global ARG)
+ARG BASE_IMAGE=alpine
+ARG BASE_TAG=3.18
+
+FROM ${BASE_IMAGE}:${BASE_TAG}
+
+ARG APP_VERSION=1.0.0
+ENV VERSION=${APP_VERSION}
+
+WORKDIR /app
+USER nobody
+HEALTHCHECK CMD echo "ok"
+CMD ["echo", "version: ${VERSION}"]
