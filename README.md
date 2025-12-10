@@ -1,5 +1,7 @@
 # docker-lint
 
+[![CI](https://img.shields.io/github/actions/workflow/status/docker-lint/docker-lint/ci.yml?branch=main&logo=github)](https://github.com/docker-lint/docker-lint/actions/workflows/ci.yml) [![Codecov](https://codecov.io/gh/docker-lint/docker-lint/graph/badge.svg)](https://codecov.io/gh/docker-lint/docker-lint) [![Go Report Card](https://goreportcard.com/badge/github.com/docker-lint/docker-lint)](https://goreportcard.com/report/github.com/docker-lint/docker-lint) [![Go Reference](https://pkg.go.dev/badge/github.com/docker-lint/docker-lint.svg)](https://pkg.go.dev/github.com/docker-lint/docker-lint) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/docker-lint/docker-lint?display_name=release&sort=semver)](https://github.com/docker-lint/docker-lint/releases)
+
 A minimal, production-grade CLI tool for statically analyzing Dockerfiles to detect common inefficiencies, anti-patterns, and security issues.
 
 ## Features
