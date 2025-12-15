@@ -6,7 +6,7 @@ Thank you for your interest in contributing to docker-lint!
 
 ### Prerequisites
 
-- Go 1.22 or later (matches the `go` directive in `go.mod`)
+- Go 1.22.x or later (matches the `go 1.22.0` directive in `go.mod`)
 - Git
 
 ### Getting Started
