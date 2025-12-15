@@ -1,5 +1,5 @@
 # Binaries
-docker-lint
+/docker-lint
 docker-lint.exe
 *.exe
 *.exe~

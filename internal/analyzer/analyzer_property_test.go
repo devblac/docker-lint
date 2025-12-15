@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
-	"github.com/docker-lint/docker-lint/internal/rules"
+	"github.com/devblac/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/rules"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"

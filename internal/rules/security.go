@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // secretPatterns contains regex patterns for detecting potential secrets in ENV/ARG keys.

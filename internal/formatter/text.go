@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // TextFormatter formats findings as human-readable text.

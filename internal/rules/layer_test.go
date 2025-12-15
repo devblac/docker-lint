@@ -3,7 +3,7 @@ package rules
 import (
 	"testing"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 func TestLayerRulesRegistered(t *testing.T) {

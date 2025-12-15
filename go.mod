@@ -1,4 +1,4 @@
-module github.com/docker-lint/docker-lint
+module github.com/devblac/docker-lint
 
 go 1.22.0
 

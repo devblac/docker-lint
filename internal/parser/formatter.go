@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // Format converts a Dockerfile AST back to text representation.

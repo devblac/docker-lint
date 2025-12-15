@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
-	"github.com/docker-lint/docker-lint/internal/parser"
-	"github.com/docker-lint/docker-lint/internal/rules"
+	"github.com/devblac/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/parser"
+	"github.com/devblac/docker-lint/internal/rules"
 )
 
 func TestAnalyzer_Analyze_BasicFindings(t *testing.T) {

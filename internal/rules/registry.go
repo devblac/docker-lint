@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // Rule IDs for base image rules (DL3xxx)
