@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // JSONFinding represents a single finding in JSON output format.

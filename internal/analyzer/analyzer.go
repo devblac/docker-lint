@@ -4,8 +4,8 @@ package analyzer
 import (
 	"sort"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
-	"github.com/docker-lint/docker-lint/internal/rules"
+	"github.com/devblac/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/rules"
 )
 
 // Config holds configuration options for the analyzer.

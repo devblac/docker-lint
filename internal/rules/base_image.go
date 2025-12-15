@@ -4,7 +4,7 @@ package rules
 import (
 	"strings"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // largeBaseImages is a set of known large base images that have smaller alternatives.

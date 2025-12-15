@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // TestParseAllInstructionTypes tests parsing of valid Dockerfiles with all instruction types.

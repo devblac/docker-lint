@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // Package manager patterns for cache cleanup detection

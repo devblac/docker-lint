@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/docker-lint/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/ast"
 )
 
 // ParseError represents a parsing error with location information.
