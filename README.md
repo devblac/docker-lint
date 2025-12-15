@@ -1,6 +1,6 @@
 # docker-lint
 
-[![CI](https://img.shields.io/github/actions/workflow/status/devblac/docker-lint/ci.yml?branch=main&logo=github)](https://github.com/devblac/docker-lint/actions/workflows/ci.yml) [![Codecov](https://codecov.io/gh/devblac/docker-lint/graph/badge.svg)](https://codecov.io/gh/devblac/docker-lint) [![Go Report Card](https://goreportcard.com/badge/github.com/devblac/docker-lint)](https://goreportcard.com/report/github.com/devblac/docker-lint) [![Go Reference](https://pkg.go.dev/badge/github.com/devblac/docker-lint.svg)](https://pkg.go.dev/github.com/devblac/docker-lint) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/devblac/docker-lint?display_name=release&sort=semver)](https://github.com/devblac/docker-lint/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/devblac/docker-lint/ci.yml?branch=main&logo=github)](https://github.com/devblac/docker-lint/actions/workflows/ci.yml) [![Go Report Card](https://goreportcard.com/badge/github.com/devblac/docker-lint)](https://goreportcard.com/report/github.com/devblac/docker-lint) [![Go Reference](https://pkg.go.dev/badge/github.com/devblac/docker-lint.svg)](https://pkg.go.dev/github.com/devblac/docker-lint) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/devblac/docker-lint?display_name=release&sort=semver)](https://github.com/devblac/docker-lint/releases)
 
 A minimal, production-grade CLI tool for statically analyzing Dockerfiles to detect common inefficiencies, anti-patterns, and security issues.
 
@@ -180,6 +180,8 @@ Machine-readable JSON output for CI/CD integration:
 ```
 
 ## CI/CD Integration
+
+The repository's CI workflow runs `go test ./... -cover`. Coverage uploads to Codecov are attempted only when a `CODECOV_TOKEN` secret is configured; otherwise the upload step is skipped while tests still gate the build.
 
 ### GitHub Actions
 
