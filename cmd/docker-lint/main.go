@@ -1,3 +1,4 @@
+// Package main provides the docker-lint CLI entry point.
 package main
 
 import (

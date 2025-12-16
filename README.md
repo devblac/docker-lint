@@ -18,7 +18,7 @@ A minimal, production-grade CLI tool for statically analyzing Dockerfiles to det
 
 ### From Source
 
-Requires Go 1.22 or later.
+Requires Go 1.22 or later (as specified in `go.mod`).
 
 ```bash
 go install github.com/devblac/docker-lint/cmd/docker-lint@latest
