@@ -46,7 +46,6 @@ func (r *SecretInEnvRule) Description() string {
 	return "Avoid storing secrets in ENV instructions as they persist in the image layers"
 }
 
-
 func (r *SecretInEnvRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
@@ -118,7 +117,6 @@ func (r *NoUserRule) Severity() ast.Severity { return ast.SeverityWarning }
 func (r *NoUserRule) Description() string {
 	return "Containers should not run as root; specify a USER instruction"
 }
-
 
 func (r *NoUserRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
@@ -200,7 +198,6 @@ func (r *AddWithURLRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 
 	return findings
 }
-
 
 // AddOverCopyRule checks for ADD where COPY would suffice (DL4004).
 type AddOverCopyRule struct{}

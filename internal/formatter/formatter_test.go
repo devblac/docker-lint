@@ -136,7 +136,6 @@ func TestTextFormatter_Format(t *testing.T) {
 	}
 }
 
-
 func TestJSONFormatter_Format(t *testing.T) {
 	tests := []struct {
 		name     string

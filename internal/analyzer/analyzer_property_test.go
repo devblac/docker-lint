@@ -722,7 +722,6 @@ func genNonEmptyIgnoreRules() gopter.Gen {
 	}, reflect.TypeOf([]string{}))
 }
 
-
 // **Feature: docker-lint, Property 4: Inline Ignore Effectiveness**
 // **Validates: Requirements 8.3**
 //

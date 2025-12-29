@@ -163,7 +163,6 @@ func (l *Lexer) scanToken() Token {
 	return Token{Type: TokenArgument, Value: arg, Line: l.line, Column: startCol}
 }
 
-
 // readNextLine reads the next line from the input, handling line continuations.
 func (l *Lexer) readNextLine() bool {
 	var fullLine strings.Builder
@@ -313,7 +312,6 @@ func (l *Lexer) scanArgument() string {
 
 	return strings.TrimSpace(result.String())
 }
-
 
 // Reset resets the lexer to read from a new reader.
 func (l *Lexer) Reset(r io.Reader) {

@@ -53,7 +53,6 @@ func (r *MultipleCMDRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-
 // MultipleEntrypointRule checks for multiple ENTRYPOINT instructions in a Dockerfile (DL3002).
 type MultipleEntrypointRule struct{}
 
@@ -158,7 +157,6 @@ func isAbsolutePath(path string) bool {
 
 	return false
 }
-
 
 // MissingHealthcheckRule checks for Dockerfiles without HEALTHCHECK instruction (DL5000).
 type MissingHealthcheckRule struct{}

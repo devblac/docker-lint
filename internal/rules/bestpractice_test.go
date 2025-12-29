@@ -72,7 +72,6 @@ func TestMultipleCMDRule(t *testing.T) {
 	}
 }
 
-
 func TestMultipleEntrypointRule(t *testing.T) {
 	rule := &MultipleEntrypointRule{}
 

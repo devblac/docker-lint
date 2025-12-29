@@ -249,5 +249,3 @@ func genRunCommands() gopter.Gen {
 		})
 	}, reflect.TypeOf([]string{}))
 }
-
-

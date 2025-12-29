@@ -408,7 +408,6 @@ func TestParseAllInstructionTypes(t *testing.T) {
 	}
 }
 
-
 // TestParseMultiStageDockerfile tests parsing of multi-stage Dockerfiles.
 // _Requirements: 1.3_
 func TestParseMultiStageDockerfile(t *testing.T) {
@@ -513,7 +512,6 @@ COPY --from=0 /app /app`
 		t.Errorf("COPY.From = %q, want 0", copyInstr.From)
 	}
 }
-
 
 // TestParseErrorReporting tests error reporting for malformed Dockerfiles.
 // _Requirements: 1.4_
@@ -637,7 +635,6 @@ func TestParseCommentsOnly(t *testing.T) {
 	}
 }
 
-
 // TestParseInlineIgnoreComments tests extraction of inline ignore comments.
 // _Requirements: 8.3_
 func TestParseInlineIgnoreComments(t *testing.T) {
@@ -759,7 +756,6 @@ RUN apk add curl`
 		t.Errorf("Comments[0].LineNum = %d, want 1", df.Comments[0].LineNum)
 	}
 }
-
 
 // TestParseLineNumbers tests that line numbers are correctly tracked.
 func TestParseLineNumbers(t *testing.T) {

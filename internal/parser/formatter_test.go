@@ -65,7 +65,6 @@ func TestFormatFromInstruction(t *testing.T) {
 	}
 }
 
-
 func TestFormatRunInstruction(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -210,7 +209,6 @@ func TestFormatHealthcheckInstruction(t *testing.T) {
 		})
 	}
 }
-
 
 func TestFormatFullDockerfile(t *testing.T) {
 	df := &ast.Dockerfile{

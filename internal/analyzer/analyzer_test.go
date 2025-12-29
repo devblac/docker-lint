@@ -63,7 +63,6 @@ RUN apt-get update
 	}
 }
 
-
 func TestAnalyzer_Analyze_InlineIgnore(t *testing.T) {
 	// Dockerfile with inline ignore comment
 	dockerfile := `# docker-lint ignore: DL3006

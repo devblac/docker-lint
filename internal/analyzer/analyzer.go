@@ -78,7 +78,6 @@ func (a *Analyzer) Analyze(dockerfile *ast.Dockerfile) []ast.Finding {
 	return allFindings
 }
 
-
 // isIgnoredByInlineComment checks if a finding should be ignored based on inline comments.
 // Inline ignore comments apply to the line immediately following the comment.
 func (a *Analyzer) isIgnoredByInlineComment(dockerfile *ast.Dockerfile, finding ast.Finding) bool {

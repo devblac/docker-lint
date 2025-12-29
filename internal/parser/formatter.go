@@ -71,7 +71,6 @@ func formatInstruction(instr ast.Instruction) string {
 	}
 }
 
-
 // formatFrom formats a FROM instruction.
 func formatFrom(f *ast.FromInstruction) string {
 	var parts []string
@@ -184,7 +183,6 @@ func formatUser(u *ast.UserInstruction) string {
 	}
 	return "USER " + u.User
 }
-
 
 // formatLabel formats a LABEL instruction.
 func formatLabel(l *ast.LabelInstruction) string {

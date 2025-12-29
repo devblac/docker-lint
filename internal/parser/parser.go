@@ -135,7 +135,6 @@ func (p *Parser) Parse(r io.Reader) (*ast.Dockerfile, error) {
 	}
 }
 
-
 // parseInlineIgnore extracts rule IDs from inline ignore comments.
 // Format: # docker-lint ignore: RULE_ID[, RULE_ID...]
 func (p *Parser) parseInlineIgnore(comment string, line int) {
@@ -405,7 +404,6 @@ func (p *Parser) parseAdd(line int, rawText, args string) (*ast.AddInstruction, 
 
 	return instr, nil
 }
-
 
 // parseEnv parses an ENV instruction.
 // Format: ENV <key>=<value> ... or ENV <key> <value>
@@ -744,7 +742,6 @@ func (p *Parser) parseOnbuild(line int, rawText, args string) (*ast.OnbuildInstr
 	instr.Instruction = innerInstr
 	return instr, nil
 }
-
 
 // Helper functions
 

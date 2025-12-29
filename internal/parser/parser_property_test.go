@@ -111,7 +111,6 @@ func genInstruction() gopter.Gen {
 	)
 }
 
-
 // genFromInstruction generates a random FROM instruction.
 func genFromInstruction() gopter.Gen {
 	return gopter.CombineGens(

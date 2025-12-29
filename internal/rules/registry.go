@@ -10,12 +10,12 @@ import (
 
 // Rule IDs for base image rules (DL3xxx)
 const (
-	RuleMissingTag         = "DL3006" // Missing explicit image tag
-	RuleLatestTag          = "DL3007" // Using 'latest' tag
-	RuleLargeBaseImage     = "DL3008" // Large base image without slim variant
-	RuleCacheNotCleaned    = "DL3009" // Package manager cache not cleaned
-	RuleConsecutiveRun     = "DL3010" // Consecutive RUN instructions
-	RuleSuboptimalOrdering = "DL3011" // Suboptimal layer ordering
+	RuleMissingTag           = "DL3006" // Missing explicit image tag
+	RuleLatestTag            = "DL3007" // Using 'latest' tag
+	RuleLargeBaseImage       = "DL3008" // Large base image without slim variant
+	RuleCacheNotCleaned      = "DL3009" // Package manager cache not cleaned
+	RuleConsecutiveRun       = "DL3010" // Consecutive RUN instructions
+	RuleSuboptimalOrdering   = "DL3011" // Suboptimal layer ordering
 	RuleUpdateWithoutInstall = "DL3012" // Package update without install
 )
 
@@ -28,11 +28,11 @@ const (
 
 // Rule IDs for security rules (DL4xxx)
 const (
-	RuleSecretInEnv  = "DL4000" // Potential secret in ENV
-	RuleSecretInArg  = "DL4001" // Potential secret in ARG
-	RuleNoUser       = "DL4002" // No USER instruction (running as root)
-	RuleAddWithURL   = "DL4003" // ADD with URL
-	RuleAddOverCopy  = "DL4004" // ADD where COPY would suffice
+	RuleSecretInEnv = "DL4000" // Potential secret in ENV
+	RuleSecretInArg = "DL4001" // Potential secret in ARG
+	RuleNoUser      = "DL4002" // No USER instruction (running as root)
+	RuleAddWithURL  = "DL4003" // ADD with URL
+	RuleAddOverCopy = "DL4004" // ADD where COPY would suffice
 )
 
 // Rule IDs for best practice rules (DL5xxx)
@@ -58,7 +58,6 @@ type Rule interface {
 	// Check analyzes the Dockerfile and returns any findings.
 	Check(dockerfile *ast.Dockerfile) []ast.Finding
 }
-
 
 // RuleRegistry manages the collection of available lint rules.
 type RuleRegistry struct {

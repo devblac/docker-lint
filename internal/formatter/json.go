@@ -48,7 +48,6 @@ func NewJSONFormatter(filename string, quiet bool) *JSONFormatter {
 	}
 }
 
-
 // Format writes the findings to the given writer as valid JSON.
 func (f *JSONFormatter) Format(findings []ast.Finding, w io.Writer) error {
 	output := JSONOutput{

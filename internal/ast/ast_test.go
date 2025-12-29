@@ -44,11 +44,11 @@ func TestFindingCreation(t *testing.T) {
 
 func TestFromInstructionMethods(t *testing.T) {
 	instr := &FromInstruction{
-		LineNum:  1,
-		RawText:  "FROM alpine:3.18 AS builder",
-		Image:    "alpine",
-		Tag:      "3.18",
-		Alias:    "builder",
+		LineNum: 1,
+		RawText: "FROM alpine:3.18 AS builder",
+		Image:   "alpine",
+		Tag:     "3.18",
+		Alias:   "builder",
 	}
 
 	if instr.Line() != 1 {
@@ -61,7 +61,6 @@ func TestFromInstructionMethods(t *testing.T) {
 		t.Errorf("FromInstruction.Type() = %v, want %v", instr.Type(), InstrFROM)
 	}
 }
-
 
 func TestRunInstructionMethods(t *testing.T) {
 	instr := &RunInstruction{
@@ -146,7 +145,6 @@ func TestArgInstructionMethods(t *testing.T) {
 		t.Errorf("ArgInstruction.Type() = %v, want %v", instr.Type(), InstrARG)
 	}
 }
-
 
 func TestExposeInstructionMethods(t *testing.T) {
 	instr := &ExposeInstruction{
@@ -255,7 +253,6 @@ func TestEntrypointInstructionMethods(t *testing.T) {
 		t.Errorf("EntrypointInstruction.Type() = %v, want %v", instr.Type(), InstrENTRYPOINT)
 	}
 }
-
 
 func TestHealthcheckInstructionMethods(t *testing.T) {
 	instr := &HealthcheckInstruction{

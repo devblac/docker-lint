@@ -9,28 +9,28 @@ import (
 
 // largeBaseImages is a set of known large base images that have smaller alternatives.
 var largeBaseImages = map[string]string{
-	"ubuntu":       "ubuntu:*-slim or alpine",
-	"debian":       "debian:*-slim or alpine",
-	"centos":       "alpine or distroless",
-	"fedora":       "alpine or distroless",
-	"amazonlinux":  "alpine or distroless",
-	"oraclelinux":  "alpine or distroless",
-	"python":       "python:*-slim or python:*-alpine",
-	"node":         "node:*-slim or node:*-alpine",
-	"ruby":         "ruby:*-slim or ruby:*-alpine",
-	"golang":       "golang:*-alpine or distroless",
-	"openjdk":      "openjdk:*-slim or eclipse-temurin:*-alpine",
-	"java":         "eclipse-temurin:*-alpine or distroless",
-	"php":          "php:*-alpine",
-	"perl":         "perl:*-slim",
-	"rust":         "rust:*-slim or rust:*-alpine",
+	"ubuntu":      "ubuntu:*-slim or alpine",
+	"debian":      "debian:*-slim or alpine",
+	"centos":      "alpine or distroless",
+	"fedora":      "alpine or distroless",
+	"amazonlinux": "alpine or distroless",
+	"oraclelinux": "alpine or distroless",
+	"python":      "python:*-slim or python:*-alpine",
+	"node":        "node:*-slim or node:*-alpine",
+	"ruby":        "ruby:*-slim or ruby:*-alpine",
+	"golang":      "golang:*-alpine or distroless",
+	"openjdk":     "openjdk:*-slim or eclipse-temurin:*-alpine",
+	"java":        "eclipse-temurin:*-alpine or distroless",
+	"php":         "php:*-alpine",
+	"perl":        "perl:*-slim",
+	"rust":        "rust:*-slim or rust:*-alpine",
 }
 
 // MissingTagRule checks for FROM instructions without explicit image tags (DL3006).
 type MissingTagRule struct{}
 
-func (r *MissingTagRule) ID() string          { return RuleMissingTag }
-func (r *MissingTagRule) Name() string        { return "Missing explicit image tag" }
+func (r *MissingTagRule) ID() string             { return RuleMissingTag }
+func (r *MissingTagRule) Name() string           { return "Missing explicit image tag" }
 func (r *MissingTagRule) Severity() ast.Severity { return ast.SeverityWarning }
 
 func (r *MissingTagRule) Description() string {
@@ -72,12 +72,11 @@ func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-
 // LatestTagRule checks for FROM instructions using the 'latest' tag (DL3007).
 type LatestTagRule struct{}
 
-func (r *LatestTagRule) ID() string          { return RuleLatestTag }
-func (r *LatestTagRule) Name() string        { return "Using 'latest' tag" }
+func (r *LatestTagRule) ID() string             { return RuleLatestTag }
+func (r *LatestTagRule) Name() string           { return "Using 'latest' tag" }
 func (r *LatestTagRule) Severity() ast.Severity { return ast.SeverityWarning }
 
 func (r *LatestTagRule) Description() string {
@@ -122,8 +121,8 @@ func (r *LatestTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 // LargeBaseImageRule checks for large base images without slim variants (DL3008).
 type LargeBaseImageRule struct{}
 
-func (r *LargeBaseImageRule) ID() string          { return RuleLargeBaseImage }
-func (r *LargeBaseImageRule) Name() string        { return "Large base image" }
+func (r *LargeBaseImageRule) ID() string             { return RuleLargeBaseImage }
+func (r *LargeBaseImageRule) Name() string           { return "Large base image" }
 func (r *LargeBaseImageRule) Severity() ast.Severity { return ast.SeverityWarning }
 
 func (r *LargeBaseImageRule) Description() string {

@@ -54,7 +54,6 @@ func TestIsValidInstruction(t *testing.T) {
 	}
 }
 
-
 func TestLexerBasicInstructions(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -241,7 +240,6 @@ func TestLexerBasicInstructions(t *testing.T) {
 	}
 }
 
-
 func TestLexerMultiLineHandling(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -376,7 +374,6 @@ FROM alpine`
 		t.Errorf("got %d comment tokens, want 2", commentCount)
 	}
 }
-
 
 func TestLexerEdgeCases(t *testing.T) {
 	t.Run("Empty input", func(t *testing.T) {
@@ -534,7 +531,6 @@ func TestLexerEdgeCases(t *testing.T) {
 		t.Error("expected to find argument token")
 	})
 }
-
 
 func TestLexerMultipleInstructions(t *testing.T) {
 	input := `FROM alpine:3.18

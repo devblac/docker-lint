@@ -47,7 +47,6 @@ func (s Severity) String() string {
 	}
 }
 
-
 // Finding represents a lint finding from rule analysis.
 type Finding struct {
 	RuleID     string
@@ -81,9 +80,9 @@ type Stage struct {
 
 // Dockerfile represents a parsed Dockerfile.
 type Dockerfile struct {
-	Stages       []Stage
-	Instructions []Instruction
-	Comments     []Comment
+	Stages        []Stage
+	Instructions  []Instruction
+	Comments      []Comment
 	InlineIgnores map[int][]string // line -> rule IDs to ignore
 }
 
@@ -101,7 +100,6 @@ type FromInstruction struct {
 func (f *FromInstruction) Line() int             { return f.LineNum }
 func (f *FromInstruction) Raw() string           { return f.RawText }
 func (f *FromInstruction) Type() InstructionType { return InstrFROM }
-
 
 // RunInstruction represents a RUN instruction.
 type RunInstruction struct {
@@ -166,7 +164,6 @@ func (a *ArgInstruction) Line() int             { return a.LineNum }
 func (a *ArgInstruction) Raw() string           { return a.RawText }
 func (a *ArgInstruction) Type() InstructionType { return InstrARG }
 
-
 // ExposeInstruction represents an EXPOSE instruction.
 type ExposeInstruction struct {
 	LineNum int
@@ -222,7 +219,6 @@ type VolumeInstruction struct {
 func (v *VolumeInstruction) Line() int             { return v.LineNum }
 func (v *VolumeInstruction) Raw() string           { return v.RawText }
 func (v *VolumeInstruction) Type() InstructionType { return InstrVOLUME }
-
 
 // CmdInstruction represents a CMD instruction.
 type CmdInstruction struct {
