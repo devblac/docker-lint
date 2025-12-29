@@ -46,7 +46,6 @@ func (r *CacheNotCleanedRule) Description() string {
 	return "Clean package manager cache in the same RUN instruction to reduce image size"
 }
 
-
 func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
@@ -186,7 +185,6 @@ func intToString(n int) string {
 	return digits
 }
 
-
 // SuboptimalOrderingRule checks for COPY/ADD before RUN that doesn't depend on copied files (DL3011).
 type SuboptimalOrderingRule struct{}
 
@@ -301,13 +299,13 @@ func isPackageFile(dest string) bool {
 	}
 	dest = strings.ToLower(dest)
 	for _, pf := range packageFiles {
-		if strings.HasSuffix(dest, pf) || strings.Contains(dest, pf) {
+		pfLower := strings.ToLower(pf)
+		if strings.HasSuffix(dest, pfLower) || strings.Contains(dest, pfLower) {
 			return true
 		}
 	}
 	return false
 }
-
 
 // UpdateWithoutInstallRule checks for package update without install in same command (DL3012).
 type UpdateWithoutInstallRule struct{}

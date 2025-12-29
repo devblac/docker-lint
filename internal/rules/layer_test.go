@@ -9,9 +9,9 @@ import (
 func TestLayerRulesRegistered(t *testing.T) {
 	// Verify all layer optimization rules are registered
 	expectedRules := []string{
-		RuleCacheNotCleaned,     // DL3009
-		RuleConsecutiveRun,      // DL3010
-		RuleSuboptimalOrdering,  // DL3011
+		RuleCacheNotCleaned,      // DL3009
+		RuleConsecutiveRun,       // DL3010
+		RuleSuboptimalOrdering,   // DL3011
 		RuleUpdateWithoutInstall, // DL3012
 	}
 
@@ -263,6 +263,95 @@ func TestUpdateWithoutInstallRule(t *testing.T) {
 				t.Errorf("expected rule ID %s, got %s", RuleUpdateWithoutInstall, findings[0].RuleID)
 			}
 		})
+	}
+}
+
+func TestSuboptimalOrderingRule(t *testing.T) {
+	rule := &SuboptimalOrderingRule{}
+
+	t.Run("warns when copy precedes package install with later copy", func(t *testing.T) {
+		dockerfile := &ast.Dockerfile{
+			Stages: []ast.Stage{
+				{
+					Index: 0,
+					Instructions: []ast.Instruction{
+						&ast.CopyInstruction{LineNum: 1, Sources: []string{"app/"}, Dest: "/app/"},
+						&ast.RunInstruction{LineNum: 2, Command: "apt-get install -y curl"},
+						&ast.CopyInstruction{LineNum: 3, Sources: []string{"assets/"}, Dest: "/assets/"},
+					},
+				},
+			},
+		}
+
+		findings := rule.Check(dockerfile)
+		if len(findings) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(findings))
+		}
+		if findings[0].RuleID != RuleSuboptimalOrdering {
+			t.Fatalf("expected rule %s, got %s", RuleSuboptimalOrdering, findings[0].RuleID)
+		}
+	})
+
+	t.Run("package manifest copy is ignored before install", func(t *testing.T) {
+		dockerfile := &ast.Dockerfile{
+			Stages: []ast.Stage{
+				{
+					Index: 0,
+					Instructions: []ast.Instruction{
+						&ast.CopyInstruction{LineNum: 1, Sources: []string{"requirements.txt"}, Dest: "/app/requirements.txt"},
+						&ast.RunInstruction{LineNum: 2, Command: "pip install -r requirements.txt"},
+						&ast.CopyInstruction{LineNum: 3, Sources: []string{"src/"}, Dest: "/app/src/"},
+					},
+				},
+			},
+		}
+
+		findings := rule.Check(dockerfile)
+		if len(findings) != 0 {
+			t.Fatalf("expected 0 findings, got %d", len(findings))
+		}
+	})
+}
+
+func TestIsPackageInstallCommand(t *testing.T) {
+	tests := []struct {
+		cmd      string
+		expected bool
+	}{
+		{"apt-get install -y curl", true},
+		{"yum install -y curl", true},
+		{"apk add --no-cache bash", true},
+		{"pip install flask", true},
+		{"npm install", true},
+		{"yarn install", true},
+		{"go mod download", true},
+		{"echo hello", false},
+	}
+
+	for _, tt := range tests {
+		if got := isPackageInstallCommand(tt.cmd); got != tt.expected {
+			t.Errorf("isPackageInstallCommand(%q) = %v, want %v", tt.cmd, got, tt.expected)
+		}
+	}
+}
+
+func TestIsPackageFile(t *testing.T) {
+	tests := []struct {
+		dest     string
+		expected bool
+	}{
+		{"/app/requirements.txt", true},
+		{"/app/package.json", true},
+		{"/app/go.mod", true},
+		{"/app/Gemfile", true},
+		{"/app/src/main.go", false},
+		{"/data/readme.md", false},
+	}
+
+	for _, tt := range tests {
+		if got := isPackageFile(tt.dest); got != tt.expected {
+			t.Errorf("isPackageFile(%q) = %v, want %v", tt.dest, got, tt.expected)
+		}
 	}
 }
 
