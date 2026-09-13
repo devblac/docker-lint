@@ -16,8 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rule ignore configuration (--ignore flag and inline comments)
 - Strict mode for CI integration
 
+- `--version` now reports commit and build date (set via `-ldflags "-X main.commit=... -X main.date=..."`)
+- `--help` output documents exit codes
+
 ### Changed
-- N/A
+- CLI logic moved into a testable `run()` function with explicit exit code constants
+- Error messages on stderr are prefixed with `Error:`
 
 ### Deprecated
 - N/A
@@ -26,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - N/A
 
 ### Fixed
-- N/A
+- CLI tests imported a stale module path (`github.com/docker-lint/docker-lint`), breaking `go test ./...`
 
 ### Security
 - N/A
