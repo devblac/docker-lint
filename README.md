@@ -7,6 +7,7 @@ A minimal, production-grade CLI tool for statically analyzing Dockerfiles to det
 ## Features
 
 - **Static Analysis**: Purely static analysis - never executes Docker builds
+- **Real Dockerfile Syntax**: Parsing is delegated to BuildKit, the parser `docker build` itself uses, so heredocs (`RUN <<EOT`), parser directives (`# syntax`, `# escape`), `RUN --mount` flags and line continuations are understood exactly as Docker understands them
 - **Single Binary**: Compiles to a single Go binary with no runtime dependencies
 - **CI/CD Ready**: Clear exit codes (0, 1, 2) and JSON output for pipeline integration
 - **Configurable**: Ignore specific rules via CLI flags or inline comments

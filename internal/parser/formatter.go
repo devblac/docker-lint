@@ -1,4 +1,4 @@
-// Package parser provides lexer, parser, and formatter for Dockerfile content.
+// Dockerfile formatting helpers: turn the AST back into source text.
 package parser
 
 import (

@@ -1,8 +1,8 @@
-// Package parser provides lexer, parser, and formatter for Dockerfile content.
 package parser
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/devblac/docker-lint/internal/ast"
@@ -326,6 +326,13 @@ func genSimpleArg() gopter.Gen {
 	return gen.OneConstOf("echo", "hello", "world", "app", "start", "run")
 }
 
+// sortedCopy returns a sorted copy of the given strings.
+func sortedCopy(values []string) []string {
+	out := append([]string(nil), values...)
+	sort.Strings(out)
+	return out
+}
+
 // instructionsEquivalent compares two instructions for semantic equivalence.
 func instructionsEquivalent(a, b ast.Instruction) bool {
 	if a.Type() != b.Type() {
@@ -367,7 +374,9 @@ func instructionsEquivalent(a, b ast.Instruction) bool {
 
 	case *ast.ExposeInstruction:
 		bi := b.(*ast.ExposeInstruction)
-		return reflect.DeepEqual(ai.Ports, bi.Ports)
+		// Port order carries no meaning and the parser normalises it the way
+		// Docker does, so compare the ports as a set.
+		return reflect.DeepEqual(sortedCopy(ai.Ports), sortedCopy(bi.Ports))
 
 	case *ast.CmdInstruction:
 		bi := b.(*ast.CmdInstruction)
