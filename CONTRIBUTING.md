@@ -39,7 +39,7 @@ docker-lint/
 ├── cmd/docker-lint/     # CLI entry point
 ├── internal/
 │   ├── ast/             # AST data structures
-│   ├── parser/          # Lexer and parser
+│   ├── parser/          # BuildKit parse result -> AST conversion
 │   ├── rules/           # Lint rule implementations
 │   ├── analyzer/        # Rule orchestration
 │   └── formatter/       # Output formatters

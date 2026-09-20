@@ -1,4 +1,3 @@
-// Package parser provides lexer, parser, and formatter for Dockerfile content.
 package parser
 
 import (
