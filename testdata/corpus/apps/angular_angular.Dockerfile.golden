@@ -1,0 +1,4 @@
+20:1 warning DL3009 apt-get install without cache cleanup increases image size
+20:1 info DL3010 Found 2 consecutive RUN instructions that could be combined
+33:1 warning DL4002 No USER instruction in final stage 'dev-envs'; container will run as root
+33:1 info DL5000 No HEALTHCHECK instruction found

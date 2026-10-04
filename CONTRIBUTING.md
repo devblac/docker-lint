@@ -52,6 +52,10 @@ docker-lint/
 - Write property-based tests for universal properties
 - Use table-driven tests where appropriate
 - Include test fixtures in `testdata/`
+- After changing a rule or the parser, regenerate the real-world corpus snapshots
+  with `go test ./internal/analyzer -run TestCorpus -update-corpus` and review the
+  diff: every changed line is a finding that appeared, disappeared or moved on a real
+  Dockerfile (see `testdata/corpus/SOURCES.md`)
 
 ### Running Tests
 

@@ -1,0 +1,6 @@
+4:1 warning DL3009 pip install without --no-cache-dir increases image size
+4:1 info DL3010 Found 6 consecutive RUN instructions that could be combined
+7:1 warning DL3009 apk add without --no-cache increases image size
+26:1 info DL3010 Found 2 consecutive RUN instructions that could be combined
+27:1 warning DL3009 pip install without --no-cache-dir increases image size
+32:1 info DL5000 No HEALTHCHECK instruction found

@@ -270,6 +270,37 @@ func TestParseRunMountFlag(t *testing.T) {
 	if second.Command != "go build -o /app" {
 		t.Errorf("RUN command = %q, want %q", second.Command, "go build -o /app")
 	}
+
+	// Only cache mounts are reported; the secret mount is not a cache.
+	if len(first.CacheMounts) != 1 || first.CacheMounts[0] != "/go/pkg/mod" {
+		t.Errorf("CacheMounts = %v, want [/go/pkg/mod]", first.CacheMounts)
+	}
+	if len(second.CacheMounts) != 0 {
+		t.Errorf("CacheMounts = %v, want none for a secret mount", second.CacheMounts)
+	}
+}
+
+// TestParseRunCacheMountVariants verifies cache mount targets across option
+// spellings, multiple mounts and unexpanded variables.
+func TestParseRunCacheMountVariants(t *testing.T) {
+	input := "FROM debian:bookworm\n" +
+		"ARG CACHE_DIR=/root/.cache\n" +
+		"RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n" +
+		"    --mount=type=cache,dst=/var/lib/apt \\\n" +
+		"    --mount=type=cache,target=${CACHE_DIR} \\\n" +
+		"    --mount=type=bind,target=/src \\\n" +
+		"    apt-get update\n"
+
+	df, err := ParseString(input)
+	if err != nil {
+		t.Fatalf("ParseString() error = %v", err)
+	}
+
+	got := findRun(t, df, 0).CacheMounts
+	want := []string{"/var/cache/apt", "/var/lib/apt", "${CACHE_DIR}"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("CacheMounts = %v, want %v", got, want)
+	}
 }
 
 // TestParseCommentInsideContinuation verifies that a comment inside a line

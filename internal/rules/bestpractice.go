@@ -159,14 +159,18 @@ func isAbsolutePath(path string) bool {
 }
 
 // MissingHealthcheckRule checks for Dockerfiles without HEALTHCHECK instruction (DL5000).
+//
+// It is informational: orchestrators such as Kubernetes ignore the Dockerfile
+// HEALTHCHECK and use their own probes, and the regression corpus showed the
+// rule firing on 51 of 52 real-world Dockerfiles.
 type MissingHealthcheckRule struct{}
 
 func (r *MissingHealthcheckRule) ID() string             { return RuleMissingHealthcheck }
 func (r *MissingHealthcheckRule) Name() string           { return "Missing HEALTHCHECK" }
-func (r *MissingHealthcheckRule) Severity() ast.Severity { return ast.SeverityWarning }
+func (r *MissingHealthcheckRule) Severity() ast.Severity { return ast.SeverityInfo }
 
 func (r *MissingHealthcheckRule) Description() string {
-	return "Add a HEALTHCHECK instruction to enable container health monitoring"
+	return "Add a HEALTHCHECK instruction to enable container health monitoring (ignored by Kubernetes, which uses its own probes)"
 }
 
 func (r *MissingHealthcheckRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
