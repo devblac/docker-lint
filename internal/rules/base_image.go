@@ -40,12 +40,7 @@ func (r *MissingTagRule) Description() string {
 func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
-	for _, instr := range dockerfile.Instructions {
-		from, ok := instr.(*ast.FromInstruction)
-		if !ok {
-			continue
-		}
-
+	for _, from := range externalBaseImages(dockerfile) {
 		// Skip scratch image (special case, no tag needed)
 		if strings.ToLower(from.Image) == "scratch" {
 			continue
@@ -53,6 +48,12 @@ func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 
 		// Skip if using digest (more specific than tag)
 		if from.Digest != "" {
+			continue
+		}
+
+		// A build argument such as ${BASE} may carry its own tag; whether it
+		// does is only known at build time.
+		if containsVariable(from.Image) {
 			continue
 		}
 
@@ -86,12 +87,7 @@ func (r *LatestTagRule) Description() string {
 func (r *LatestTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
-	for _, instr := range dockerfile.Instructions {
-		from, ok := instr.(*ast.FromInstruction)
-		if !ok {
-			continue
-		}
-
+	for _, from := range externalBaseImages(dockerfile) {
 		// Skip scratch image
 		if strings.ToLower(from.Image) == "scratch" {
 			continue
@@ -132,9 +128,10 @@ func (r *LargeBaseImageRule) Description() string {
 func (r *LargeBaseImageRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
-	for _, instr := range dockerfile.Instructions {
-		from, ok := instr.(*ast.FromInstruction)
-		if !ok {
+	for _, from := range externalBaseImages(dockerfile) {
+		// A variable tag such as python:${PY_TAG} may well resolve to a slim
+		// variant, so only judge tags that are written out.
+		if containsVariable(from.Tag) {
 			continue
 		}
 
@@ -164,6 +161,40 @@ func (r *LargeBaseImageRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	}
 
 	return findings
+}
+
+// externalBaseImages returns the FROM instructions that pull an image from a
+// registry, skipping those that build on an earlier stage ("FROM builder"): a
+// stage reference has no tag of its own, and its base was already checked.
+// Stage names shadow image names in Docker, so a stage called "alpine" makes a
+// later "FROM alpine" a stage reference too.
+func externalBaseImages(dockerfile *ast.Dockerfile) []*ast.FromInstruction {
+	stageNames := make(map[string]bool)
+	var froms []*ast.FromInstruction
+
+	for _, instr := range dockerfile.Instructions {
+		from, ok := instr.(*ast.FromInstruction)
+		if !ok {
+			continue
+		}
+
+		isStageRef := from.Tag == "" && from.Digest == "" && stageNames[strings.ToLower(from.Image)]
+		if !isStageRef {
+			froms = append(froms, from)
+		}
+
+		if from.Alias != "" {
+			stageNames[strings.ToLower(from.Alias)] = true
+		}
+	}
+
+	return froms
+}
+
+// containsVariable reports whether s references a build argument or
+// environment variable, whose value is only known at build time.
+func containsVariable(s string) bool {
+	return strings.Contains(s, "$")
 }
 
 // extractBaseImageName extracts the image name without registry prefix.

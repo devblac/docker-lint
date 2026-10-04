@@ -66,6 +66,35 @@ func TestMissingTagRule(t *testing.T) {
 			},
 			expectedCount: 0,
 		},
+		{
+			name: "build argument image - no warning",
+			dockerfile: &ast.Dockerfile{
+				Instructions: []ast.Instruction{
+					&ast.FromInstruction{LineNum: 2, Image: "${BASE}"},
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "reference to an earlier stage - no warning",
+			dockerfile: &ast.Dockerfile{
+				Instructions: []ast.Instruction{
+					&ast.FromInstruction{LineNum: 1, Image: "golang", Tag: "1.22", Alias: "builder"},
+					&ast.FromInstruction{LineNum: 2, Image: "builder", Alias: "test"},
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "untagged image before a stage of the same name is defined - warning",
+			dockerfile: &ast.Dockerfile{
+				Instructions: []ast.Instruction{
+					&ast.FromInstruction{LineNum: 1, Image: "builder"},
+					&ast.FromInstruction{LineNum: 2, Image: "golang", Tag: "1.22", Alias: "builder"},
+				},
+			},
+			expectedCount: 1,
+		},
 	}
 
 	for _, tt := range tests {

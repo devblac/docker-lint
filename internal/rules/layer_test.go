@@ -311,6 +311,54 @@ func TestSuboptimalOrderingRule(t *testing.T) {
 			t.Fatalf("expected 0 findings, got %d", len(findings))
 		}
 	})
+
+	// The recommended caching pattern: copy only the manifests into the
+	// working directory, install, then copy the rest.
+	manifestCopies := map[string][]string{
+		"go modules":        {"go.mod", "go.sum"},
+		"npm wildcard":      {"package*.json"},
+		"dotnet projects":   {"*.csproj"},
+		"python and poetry": {"pyproject.toml", "poetry.lock"},
+	}
+	for name, sources := range manifestCopies {
+		t.Run("manifest copy into ./ is not flagged: "+name, func(t *testing.T) {
+			dockerfile := &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index: 0,
+						Instructions: []ast.Instruction{
+							&ast.CopyInstruction{LineNum: 1, Sources: sources, Dest: "./"},
+							&ast.RunInstruction{LineNum: 2, Command: "go mod download"},
+							&ast.CopyInstruction{LineNum: 3, Sources: []string{"."}, Dest: "."},
+						},
+					},
+				},
+			}
+
+			if findings := rule.Check(dockerfile); len(findings) != 0 {
+				t.Fatalf("expected 0 findings, got %d", len(findings))
+			}
+		})
+	}
+
+	t.Run("broad wildcard copy is still flagged", func(t *testing.T) {
+		dockerfile := &ast.Dockerfile{
+			Stages: []ast.Stage{
+				{
+					Index: 0,
+					Instructions: []ast.Instruction{
+						&ast.CopyInstruction{LineNum: 1, Sources: []string{"*"}, Dest: "./"},
+						&ast.RunInstruction{LineNum: 2, Command: "npm install"},
+						&ast.CopyInstruction{LineNum: 3, Sources: []string{"."}, Dest: "."},
+					},
+				},
+			},
+		}
+
+		if findings := rule.Check(dockerfile); len(findings) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(findings))
+		}
+	})
 }
 
 func TestIsPackageInstallCommand(t *testing.T) {
@@ -346,6 +394,17 @@ func TestIsPackageFile(t *testing.T) {
 		{"/app/Gemfile", true},
 		{"/app/src/main.go", false},
 		{"/data/readme.md", false},
+		{"go.sum", true},
+		{"pnpm-lock.yaml", true},
+		{"requirements-dev.txt", true},
+		{"MyApp.csproj", true},
+		{"package*.json", true},
+		{"*.lock", true},
+		{"*", false},
+		{"*.go", false},
+		{".", false},
+		{"./", false},
+		{"package.json.bak", false},
 	}
 
 	for _, tt := range tests {
