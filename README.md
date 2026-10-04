@@ -127,7 +127,7 @@ docker-lint includes 17 built-in rules organized into four categories.
 |----|----------|------|-------------|
 | DL4000 | Warning | Potential secret in ENV | Avoid storing secrets in ENV instructions as they persist in the image layers |
 | DL4001 | Warning | Potential secret in ARG | Avoid storing secrets in ARG instructions as they are visible in image history |
-| DL4002 | Warning | No USER instruction | Containers should not run as root; specify a USER instruction |
+| DL4002 | Warning | Final image runs as root | The final image should not run as root; set a non-root USER in the final stage. Build stages are not checked, and a USER inherited from an earlier stage counts |
 | DL4003 | Warning | ADD with URL | Using ADD with URLs is discouraged; use curl or wget in RUN for better control |
 | DL4004 | Warning | ADD where COPY would suffice | Use COPY instead of ADD when not extracting archives or fetching URLs |
 

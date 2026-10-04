@@ -4,26 +4,74 @@ package rules
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/devblac/docker-lint/internal/ast"
 )
 
-// secretPatterns contains regex patterns for detecting potential secrets in ENV/ARG keys.
-var secretPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)password`),
-	regexp.MustCompile(`(?i)passwd`),
-	regexp.MustCompile(`(?i)secret`),
-	regexp.MustCompile(`(?i)token`),
-	regexp.MustCompile(`(?i)api[_-]?key`),
-	regexp.MustCompile(`(?i)apikey`),
-	regexp.MustCompile(`(?i)private[_-]?key`),
-	regexp.MustCompile(`(?i)privatekey`),
-	regexp.MustCompile(`(?i)access[_-]?key`),
-	regexp.MustCompile(`(?i)accesskey`),
-	regexp.MustCompile(`(?i)auth[_-]?token`),
-	regexp.MustCompile(`(?i)credentials?`),
-	regexp.MustCompile(`(?i)ssh[_-]?key`),
-	regexp.MustCompile(`(?i)encryption[_-]?key`),
+// secretWords are key words that name a secret on their own. Keys are matched
+// word by word rather than by substring, so TOKENIZER_MODEL or BYPASS_CACHE do
+// not look like secrets.
+var secretWords = map[string]bool{
+	"PASSWORD":    true,
+	"PASSWD":      true,
+	"PASS":        true,
+	"SECRET":      true,
+	"TOKEN":       true,
+	"CREDENTIAL":  true,
+	"CREDENTIALS": true,
+	// Compound spellings written without a separator.
+	"APIKEY":     true,
+	"PRIVATEKEY": true,
+	"ACCESSKEY":  true,
+	"SECRETKEY":  true,
+	"AUTHTOKEN":  true,
+}
+
+// keyQualifiers are words that turn a following KEY into a secret, as in
+// API_KEY or SSH_KEY. KEY alone is too generic (CACHE_KEY, SORT_KEY).
+var keyQualifiers = map[string]bool{
+	"API":        true,
+	"PRIVATE":    true,
+	"ACCESS":     true,
+	"SECRET":     true,
+	"SSH":        true,
+	"ENCRYPTION": true,
+	"SIGNING":    true,
+	"MASTER":     true,
+	"LICENSE":    true,
+}
+
+// metadataSuffixes end keys that describe a secret instead of holding one:
+// POSTGRES_PASSWORD_FILE (the Docker secrets convention), PASSWORD_MIN_LENGTH,
+// TOKEN_URL.
+var metadataSuffixes = map[string]bool{
+	"FILE":       true,
+	"PATH":       true,
+	"DIR":        true,
+	"LENGTH":     true,
+	"LEN":        true,
+	"MIN":        true,
+	"MAX":        true,
+	"SIZE":       true,
+	"COUNT":      true,
+	"ENABLED":    true,
+	"DISABLED":   true,
+	"REQUIRED":   true,
+	"TYPE":       true,
+	"MODE":       true,
+	"POLICY":     true,
+	"TTL":        true,
+	"TIMEOUT":    true,
+	"EXPIRY":     true,
+	"EXPIRES":    true,
+	"EXPIRATION": true,
+	"URL":        true,
+	"URI":        true,
+	"ENDPOINT":   true,
+	"HOST":       true,
+	"PORT":       true,
+	"NAME":       true,
 }
 
 // urlPattern matches URLs in ADD sources
@@ -55,7 +103,12 @@ func (r *SecretInEnvRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 			continue
 		}
 
-		// Check if the key matches any secret pattern
+		// An empty value bakes nothing into the image; it is a placeholder for
+		// a value supplied at runtime.
+		if env.Value == "" {
+			continue
+		}
+
 		if isSecretKey(env.Key) {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
@@ -107,57 +160,130 @@ func (r *SecretInArgRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// NoUserRule checks for Dockerfiles without USER instruction (DL4002).
+// NoUserRule checks that the final image does not run as root (DL4002).
+//
+// Only the final stage matters: earlier stages are discarded after the build,
+// and they often need root to install packages. The final stage inherits the
+// USER of any earlier stage it builds on ("FROM builder").
 type NoUserRule struct{}
 
 func (r *NoUserRule) ID() string             { return RuleNoUser }
-func (r *NoUserRule) Name() string           { return "No USER instruction" }
+func (r *NoUserRule) Name() string           { return "Final image runs as root" }
 func (r *NoUserRule) Severity() ast.Severity { return ast.SeverityWarning }
 
 func (r *NoUserRule) Description() string {
-	return "Containers should not run as root; specify a USER instruction"
+	return "The final image should not run as root; set a non-root USER in the final stage"
 }
 
 func (r *NoUserRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
-	var findings []ast.Finding
-
-	// Check each stage separately for USER instruction
-	for _, stage := range dockerfile.Stages {
-		hasUser := false
-		var lastInstrLine int
-
-		for _, instr := range stage.Instructions {
-			if _, ok := instr.(*ast.UserInstruction); ok {
-				hasUser = true
-			}
-			lastInstrLine = instr.Line()
-		}
-
-		// If no USER instruction in this stage, report at the FROM line
-		if !hasUser && stage.FromInstr != nil {
-			// Use the FROM instruction line for the finding
-			line := stage.FromInstr.Line()
-			if lastInstrLine > 0 {
-				line = lastInstrLine
-			}
-
-			stageName := stage.Name
-			if stageName == "" {
-				stageName = "stage " + intToString(stage.Index)
-			}
-
-			findings = append(findings, ast.Finding{
-				RuleID:     r.ID(),
-				Severity:   r.Severity(),
-				Line:       line,
-				Column:     1,
-				Message:    "No USER instruction in " + stageName + "; container will run as root",
-				Suggestion: "Add 'USER <username>' instruction to run container as non-root user",
-			})
-		}
+	if len(dockerfile.Stages) == 0 {
+		return nil
 	}
 
-	return findings
+	finalIdx := len(dockerfile.Stages) - 1
+	final := dockerfile.Stages[finalIdx]
+	stageLabel := "the final stage"
+	if final.Name != "" {
+		stageLabel = "final stage '" + final.Name + "'"
+	}
+
+	user, base := effectiveUser(dockerfile.Stages, finalIdx)
+
+	if user == nil {
+		if runsAsNonRootByDefault(base) {
+			return nil
+		}
+		return []ast.Finding{{
+			RuleID:     r.ID(),
+			Severity:   r.Severity(),
+			Line:       lastLine(final),
+			Column:     1,
+			Message:    "No USER instruction in " + stageLabel + "; container will run as root",
+			Suggestion: "Add 'USER <username>' to the final stage to run the container as a non-root user",
+		}}
+	}
+
+	if isRootUser(user) {
+		return []ast.Finding{{
+			RuleID:     r.ID(),
+			Severity:   r.Severity(),
+			Line:       user.Line(),
+			Column:     1,
+			Message:    "Last USER in " + stageLabel + " is root; container will run as root",
+			Suggestion: "Switch to a non-root user with 'USER <username>' after the steps that need root",
+		}}
+	}
+
+	return nil
+}
+
+// effectiveUser returns the USER instruction in effect at the end of the stage
+// at idx, following FROM references to earlier stages, whose USER is inherited.
+// It also returns the FROM instruction of the external image the chain starts
+// from, or of the stage where a USER was found.
+func effectiveUser(stages []ast.Stage, idx int) (*ast.UserInstruction, *ast.FromInstruction) {
+	var base *ast.FromInstruction
+
+	// Each step moves to a strictly earlier stage, so this terminates.
+	for idx >= 0 {
+		stage := stages[idx]
+		base = stage.FromInstr
+
+		var user *ast.UserInstruction
+		for _, instr := range stage.Instructions {
+			if u, ok := instr.(*ast.UserInstruction); ok {
+				user = u // the last USER wins
+			}
+		}
+		if user != nil {
+			return user, base
+		}
+
+		idx = parentStage(stages[:idx], stage.FromInstr)
+	}
+
+	return nil, base
+}
+
+// parentStage returns the index of the latest earlier stage that from builds
+// on, or -1 when from pulls an external image.
+func parentStage(earlier []ast.Stage, from *ast.FromInstruction) int {
+	if from == nil || from.Tag != "" || from.Digest != "" {
+		return -1
+	}
+	for i := len(earlier) - 1; i >= 0; i-- {
+		if earlier[i].Name != "" && strings.EqualFold(earlier[i].Name, from.Image) {
+			return i
+		}
+	}
+	return -1
+}
+
+// isRootUser reports whether a USER instruction selects the root user.
+func isRootUser(user *ast.UserInstruction) bool {
+	name := strings.TrimSpace(user.User)
+	return name == "root" || name == "0"
+}
+
+// runsAsNonRootByDefault reports whether the base image is published to run as
+// a non-root user without an explicit USER, as distroless ":nonroot" images are.
+func runsAsNonRootByDefault(from *ast.FromInstruction) bool {
+	if from == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(from.Tag), "nonroot") ||
+		strings.Contains(strings.ToLower(from.Image), "nonroot")
+}
+
+// lastLine returns the line of the last instruction in a stage.
+func lastLine(stage ast.Stage) int {
+	if n := len(stage.Instructions); n > 0 {
+		return stage.Instructions[n-1].Line()
+	}
+	if stage.FromInstr != nil {
+		return stage.FromInstr.Line()
+	}
+	return 1
 }
 
 // AddWithURLRule checks for ADD instructions with URL sources (DL4003).
@@ -253,14 +379,52 @@ func (r *AddOverCopyRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// isSecretKey checks if a key name matches common secret patterns.
+// isSecretKey reports whether a variable name looks like it holds a secret.
 func isSecretKey(key string) bool {
-	for _, pattern := range secretPatterns {
-		if pattern.MatchString(key) {
+	words := keyWords(key)
+	if len(words) == 0 || metadataSuffixes[words[len(words)-1]] {
+		return false
+	}
+
+	for i, word := range words {
+		if secretWords[word] {
+			return true
+		}
+		if word == "KEY" && i > 0 && keyQualifiers[words[i-1]] {
 			return true
 		}
 	}
 	return false
+}
+
+// keyWords splits a variable name into upper-cased words on separators and
+// camelCase boundaries: "dbPassword" and "DB_PASSWORD" both give [DB PASSWORD].
+func keyWords(key string) []string {
+	var words []string
+	var current []rune
+
+	flush := func() {
+		if len(current) > 0 {
+			words = append(words, strings.ToUpper(string(current)))
+			current = current[:0]
+		}
+	}
+
+	runes := []rune(key)
+	for i, r := range runes {
+		switch {
+		case !unicode.IsLetter(r) && !unicode.IsDigit(r):
+			flush()
+		case unicode.IsUpper(r) && i > 0 && unicode.IsLower(runes[i-1]):
+			flush()
+			current = append(current, r)
+		default:
+			current = append(current, r)
+		}
+	}
+	flush()
+
+	return words
 }
 
 // isArchiveFile checks if a filename has an archive extension.

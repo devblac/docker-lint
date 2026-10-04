@@ -2,6 +2,7 @@
 package rules
 
 import (
+	"path"
 	"regexp"
 	"strings"
 
@@ -210,10 +211,10 @@ func (r *SuboptimalOrderingRule) Check(dockerfile *ast.Dockerfile) []ast.Finding
 func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 	var findings []ast.Finding
 
-	// Track COPY/ADD instructions and their destinations
+	// Track COPY/ADD instructions and their sources
 	type copyInfo struct {
-		instr ast.Instruction
-		dest  string
+		instr   ast.Instruction
+		sources []string
 	}
 	var copies []copyInfo
 
@@ -225,10 +226,10 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 			if v.From != "" {
 				continue
 			}
-			copies = append(copies, copyInfo{instr: v, dest: v.Dest})
+			copies = append(copies, copyInfo{instr: v, sources: v.Sources})
 
 		case *ast.AddInstruction:
-			copies = append(copies, copyInfo{instr: v, dest: v.Dest})
+			copies = append(copies, copyInfo{instr: v, sources: v.Sources})
 
 		case *ast.RunInstruction:
 			// Check if this RUN is a package install that likely doesn't depend on copied files
@@ -247,8 +248,9 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 				// the early copies might be suboptimal
 				if hasMoreCopies {
 					for _, cp := range copies {
-						// Skip if copying package files (requirements.txt, package.json, etc.)
-						if isPackageFile(cp.dest) {
+						// Copying only dependency manifests before the install
+						// step is the recommended caching pattern.
+						if isDependencyManifestCopy(cp.sources) {
 							continue
 						}
 						findings = append(findings, ast.Finding{
@@ -279,32 +281,88 @@ func isPackageInstallCommand(cmd string) bool {
 		strings.Contains(cmd, "go mod download")
 }
 
-// isPackageFile checks if the destination is a package dependency file
-func isPackageFile(dest string) bool {
-	packageFiles := []string{
-		"requirements.txt",
-		"package.json",
-		"package-lock.json",
-		"yarn.lock",
-		"go.mod",
-		"go.sum",
-		"Gemfile",
-		"Gemfile.lock",
-		"Cargo.toml",
-		"Cargo.lock",
-		"pom.xml",
-		"build.gradle",
-		"composer.json",
-		"composer.lock",
+// packageFiles are dependency manifests and lock files, lower-cased.
+var packageFiles = []string{
+	// Python
+	"requirements.txt", "pyproject.toml", "poetry.lock", "pipfile", "pipfile.lock",
+	"setup.py", "setup.cfg", "uv.lock",
+	// JavaScript
+	"package.json", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
+	"pnpm-lock.yaml", ".npmrc", ".yarnrc.yml",
+	// Go
+	"go.mod", "go.sum", "go.work", "go.work.sum",
+	// Ruby, Rust, PHP, Elixir
+	"gemfile", "gemfile.lock", "cargo.toml", "cargo.lock",
+	"composer.json", "composer.lock", "mix.exs", "mix.lock",
+	// JVM
+	"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle",
+	"settings.gradle.kts", "gradle.properties",
+	// .NET
+	"packages.config", "nuget.config",
+}
+
+// packageFileSuffixes are extensions of dependency manifests named per project.
+var packageFileSuffixes = []string{".csproj", ".fsproj", ".vbproj", ".sln"}
+
+// wildcardManifestCandidates are the names a wildcard source is matched
+// against: every known manifest plus examples of the per-project ones.
+var wildcardManifestCandidates = append(
+	append([]string{}, packageFiles...),
+	"requirements-dev.txt", "app.csproj", "app.fsproj", "app.sln",
+)
+
+// nonManifestProbes are ordinary source files and directories. A wildcard
+// source that matches any of them ("*", "*.go") copies more than manifests.
+var nonManifestProbes = []string{"main.go", "index.js", "app.py", "readme.md", "dockerfile", "src"}
+
+// isDependencyManifestCopy reports whether every source of a COPY/ADD is a
+// dependency manifest, as in "COPY go.mod go.sum ./".
+func isDependencyManifestCopy(sources []string) bool {
+	if len(sources) == 0 {
+		return false
 	}
-	dest = strings.ToLower(dest)
+	for _, source := range sources {
+		if !isPackageFile(source) {
+			return false
+		}
+	}
+	return true
+}
+
+// isPackageFile reports whether a path names a dependency manifest or lock
+// file. Wildcard patterns count when they select manifests only, as
+// "package*.json" or "*.csproj" do.
+func isPackageFile(p string) bool {
+	base := strings.ToLower(path.Base(strings.TrimRight(p, "/")))
+
+	if strings.ContainsAny(base, "*?[") {
+		for _, probe := range nonManifestProbes {
+			if ok, _ := path.Match(base, probe); ok {
+				return false
+			}
+		}
+		for _, candidate := range wildcardManifestCandidates {
+			if ok, _ := path.Match(base, candidate); ok {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, pf := range packageFiles {
-		pfLower := strings.ToLower(pf)
-		if strings.HasSuffix(dest, pfLower) || strings.Contains(dest, pfLower) {
+		if base == pf {
 			return true
 		}
 	}
-	return false
+	for _, suffix := range packageFileSuffixes {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+
+	// requirements-dev.txt, requirements.prod.txt and the like
+	ok, _ := path.Match("requirements*.txt", base)
+	return ok
 }
 
 // UpdateWithoutInstallRule checks for package update without install in same command (DL3012).

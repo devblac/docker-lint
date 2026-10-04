@@ -854,70 +854,57 @@ func genLineIgnorePair() gopter.Gen {
 	}, reflect.TypeOf(lineIgnorePair{}))
 }
 
-// **Feature: docker-lint, Property 8: Multi-stage Stage Isolation**
+// **Feature: docker-lint, Property 8: Final-stage USER evaluation**
 // **Validates: Requirements 1.3**
 //
-// Property: For any multi-stage Dockerfile, rules that apply to stage-specific context
-// (like missing USER) SHALL be evaluated per-stage, not globally.
-// Specifically: if one stage has a USER instruction and another doesn't, we should get
-// a finding only for the stage without USER, not for the entire Dockerfile.
-func TestMultiStageStageIsolation(t *testing.T) {
+// Property: For any multi-stage Dockerfile, the missing USER rule SHALL judge only
+// the final stage, the one that becomes the shipped image. Earlier stages are
+// discarded after the build and often need root to install packages, so a USER
+// (or its absence) there SHALL NOT produce or suppress a finding.
+func TestNoUserEvaluatesFinalStageOnly(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	parameters.MaxSize = 10
 
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("stage-specific rules evaluate per-stage, not globally", prop.ForAll(
+	properties.Property("missing USER is judged on the final stage only", prop.ForAll(
 		func(df *ast.Dockerfile) bool {
 			// Only test multi-stage Dockerfiles (2+ stages)
 			if len(df.Stages) < 2 {
 				return true // Skip single-stage Dockerfiles
 			}
 
-			// Create analyzer with only the NoUser rule to isolate the test
-			config := Config{
-				IgnoreRules: []string{},
-			}
-			analyzer := NewWithDefaults(config)
-
-			// Run analysis with only the NoUser rule
+			analyzer := NewWithDefaults(Config{IgnoreRules: []string{}})
 			findings := analyzer.AnalyzeWithRules(df, []string{rules.RuleNoUser})
 
-			// Count stages with and without USER instructions
-			stagesWithUser := make(map[int]bool)
-			stagesWithoutUser := make(map[int]bool)
-
-			for i, stage := range df.Stages {
-				hasUser := false
-				for _, instr := range stage.Instructions {
-					if _, ok := instr.(*ast.UserInstruction); ok {
-						hasUser = true
-						break
-					}
-				}
-				if hasUser {
-					stagesWithUser[i] = true
-				} else {
-					stagesWithoutUser[i] = true
+			// Generated stages all pull external images, so there is no USER
+			// inheritance: the final stage stands on its own.
+			final := df.Stages[len(df.Stages)-1]
+			finalHasUser := false
+			for _, instr := range final.Instructions {
+				if _, ok := instr.(*ast.UserInstruction); ok {
+					finalHasUser = true
+					break
 				}
 			}
 
-			// Count NoUser findings
-			noUserFindings := 0
-			for _, finding := range findings {
-				if finding.RuleID == rules.RuleNoUser {
-					noUserFindings++
-				}
+			expected := 1
+			if finalHasUser {
+				expected = 0
 			}
-
-			// The number of NoUser findings should equal the number of stages without USER
-			expectedFindings := len(stagesWithoutUser)
-
-			if noUserFindings != expectedFindings {
-				t.Logf("Expected %d NoUser findings (stages without USER), got %d", expectedFindings, noUserFindings)
-				t.Logf("Stages with USER: %v, Stages without USER: %v", stagesWithUser, stagesWithoutUser)
+			if len(findings) != expected {
+				t.Logf("final stage has USER = %v: expected %d findings, got %d", finalHasUser, expected, len(findings))
 				return false
+			}
+
+			// Any finding must point into the final stage.
+			finalStart := final.FromInstr.Line()
+			for _, finding := range findings {
+				if finding.Line < finalStart {
+					t.Logf("finding at line %d points before the final stage (line %d)", finding.Line, finalStart)
+					return false
+				}
 			}
 
 			return true

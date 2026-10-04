@@ -86,6 +86,24 @@ func TestSecretInEnvRule(t *testing.T) {
 			},
 			expectedCount: 1,
 		},
+		{
+			name: "empty secret ENV placeholder - no warning",
+			dockerfile: &ast.Dockerfile{
+				Instructions: []ast.Instruction{
+					&ast.EnvInstruction{LineNum: 1, Key: "DB_PASSWORD", Value: ""},
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "Docker secrets _FILE convention - no warning",
+			dockerfile: &ast.Dockerfile{
+				Instructions: []ast.Instruction{
+					&ast.EnvInstruction{LineNum: 1, Key: "POSTGRES_PASSWORD_FILE", Value: "/run/secrets/db"},
+				},
+			},
+			expectedCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -199,7 +217,7 @@ func TestNoUserRule(t *testing.T) {
 			expectedCount: 1,
 		},
 		{
-			name: "multi-stage with USER in final stage - one warning for first stage",
+			name: "build stage without USER is ignored when final stage has one",
 			dockerfile: &ast.Dockerfile{
 				Stages: []ast.Stage{
 					{
@@ -219,7 +237,116 @@ func TestNoUserRule(t *testing.T) {
 					},
 				},
 			},
+			expectedCount: 0,
+		},
+		{
+			name: "USER in build stage does not cover a final stage without one",
+			dockerfile: &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index:     0,
+						Name:      "builder",
+						FromInstr: &ast.FromInstruction{LineNum: 1, Image: "golang"},
+						Instructions: []ast.Instruction{
+							&ast.UserInstruction{LineNum: 2, User: "builder"},
+						},
+					},
+					{
+						Index:     1,
+						FromInstr: &ast.FromInstruction{LineNum: 3, Image: "alpine"},
+						Instructions: []ast.Instruction{
+							&ast.RunInstruction{LineNum: 4, Command: "echo hi"},
+						},
+					},
+				},
+			},
 			expectedCount: 1,
+		},
+		{
+			name: "final stage inherits USER from the stage it builds on",
+			dockerfile: &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index:     0,
+						Name:      "base",
+						FromInstr: &ast.FromInstruction{LineNum: 1, Image: "alpine", Tag: "3.20"},
+						Instructions: []ast.Instruction{
+							&ast.UserInstruction{LineNum: 2, User: "app"},
+						},
+					},
+					{
+						Index:     1,
+						FromInstr: &ast.FromInstruction{LineNum: 3, Image: "base"},
+						Instructions: []ast.Instruction{
+							&ast.RunInstruction{LineNum: 4, Command: "echo hi"},
+						},
+					},
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "last USER is root - warning",
+			dockerfile: &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index:     0,
+						FromInstr: &ast.FromInstruction{LineNum: 1, Image: "alpine"},
+						Instructions: []ast.Instruction{
+							&ast.UserInstruction{LineNum: 2, User: "app"},
+							&ast.UserInstruction{LineNum: 3, User: "root"},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "numeric root uid - warning",
+			dockerfile: &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index:     0,
+						FromInstr: &ast.FromInstruction{LineNum: 1, Image: "alpine"},
+						Instructions: []ast.Instruction{
+							&ast.UserInstruction{LineNum: 2, User: "0", Group: "0"},
+						},
+					},
+				},
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "root only for setup, then non-root - no warning",
+			dockerfile: &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index:     0,
+						FromInstr: &ast.FromInstruction{LineNum: 1, Image: "alpine"},
+						Instructions: []ast.Instruction{
+							&ast.UserInstruction{LineNum: 2, User: "root"},
+							&ast.RunInstruction{LineNum: 3, Command: "apk add curl"},
+							&ast.UserInstruction{LineNum: 4, User: "app"},
+						},
+					},
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "distroless nonroot base image - no warning",
+			dockerfile: &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index:     0,
+						FromInstr: &ast.FromInstruction{LineNum: 1, Image: "gcr.io/distroless/static", Tag: "nonroot"},
+						Instructions: []ast.Instruction{
+							&ast.CopyInstruction{LineNum: 2, Sources: []string{"app"}, Dest: "/app"},
+						},
+					},
+				},
+			},
+			expectedCount: 0,
 		},
 	}
 
@@ -367,6 +494,26 @@ func TestIsSecretKey(t *testing.T) {
 		{"CREDENTIALS", true},
 		{"SSH_KEY", true},
 		{"ENCRYPTION_KEY", true},
+		// Word matching, separators and casing
+		{"DB_PASS", true},
+		{"GITHUB_TOKEN", true},
+		{"SECRET_KEY_BASE", true},
+		{"dbPassword", true},
+		{"npm-token", true},
+		{"OAUTH2_TOKEN", true},
+		// A secret word inside a longer word is not a secret
+		{"TOKENIZER_MODEL", false},
+		{"BYPASS_CACHE", false},
+		{"PASSPORT_STRATEGY", false},
+		// KEY on its own is too generic
+		{"CACHE_KEY", false},
+		{"SORT_KEY", false},
+		// Keys that describe a secret rather than hold one
+		{"PASSWORD_MIN_LENGTH", false},
+		{"POSTGRES_PASSWORD_FILE", false},
+		{"TOKEN_URL", false},
+		{"SECRET_NAME", false},
+		{"TOKEN_TTL", false},
 	}
 
 	for _, tt := range tests {
