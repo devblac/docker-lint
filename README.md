@@ -110,14 +110,14 @@ docker-lint includes 17 built-in rules organized into four categories.
 |----|----------|------|-------------|
 | DL3006 | Warning | Missing explicit image tag | Always tag the version of an image explicitly to ensure reproducible builds |
 | DL3007 | Warning | Using 'latest' tag | Using 'latest' tag can lead to unpredictable builds as the image may change |
-| DL3008 | Warning | Large base image | Consider using a smaller base image variant (slim, alpine) to reduce image size |
+| DL3008 | Warning | Large base image | Consider a smaller variant (slim, alpine) for the base of the final image. Build stages are not checked; a final stage built on one is |
 
 ### Layer Optimization Rules
 
 | ID | Severity | Name | Description |
 |----|----------|------|-------------|
-| DL3009 | Warning | Package manager cache not cleaned | Clean package manager cache in the same RUN instruction to reduce image size |
-| DL3010 | Warning | Consecutive RUN instructions | Combine consecutive RUN instructions to reduce the number of layers |
+| DL3009 | Warning | Package manager cache not cleaned | Clean package manager cache in the same RUN instruction to reduce image size. `apt-get dist-clean` and `--mount=type=cache` count as clean |
+| DL3010 | Info | Consecutive RUN instructions | Combine consecutive RUN instructions to reduce the number of layers |
 | DL3011 | Warning | Suboptimal layer ordering | Place instructions that change less frequently earlier to optimize layer caching |
 | DL3012 | Warning | Package update without install | Combine package update with install in the same RUN instruction to avoid cache issues |
 
@@ -138,7 +138,7 @@ docker-lint includes 17 built-in rules organized into four categories.
 | DL3001 | Warning | Multiple CMD instructions | Only the last CMD instruction takes effect; multiple CMD instructions are likely a mistake |
 | DL3002 | Warning | Multiple ENTRYPOINT instructions | Only the last ENTRYPOINT instruction takes effect; multiple ENTRYPOINT instructions are likely a mistake |
 | DL3003 | Warning | WORKDIR with relative path | Use absolute paths in WORKDIR to avoid confusion about the current directory |
-| DL5000 | Warning | Missing HEALTHCHECK | Add a HEALTHCHECK instruction to enable container health monitoring |
+| DL5000 | Info | Missing HEALTHCHECK | Add a HEALTHCHECK instruction to enable container health monitoring (Kubernetes ignores it and uses its own probes) |
 | DL5001 | Info | Wildcard in COPY/ADD source | Wildcard patterns in COPY/ADD may include unnecessary files, increasing build context size |
 
 ## Output Formats

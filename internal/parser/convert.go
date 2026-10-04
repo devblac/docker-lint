@@ -47,10 +47,11 @@ func convertCommand(cmd interface{}, line int, raw string) ([]ast.Instruction, e
 
 	case *instructions.RunCommand:
 		return one(&ast.RunInstruction{
-			LineNum: line,
-			RawText: raw,
-			Command: shellCommandText(c.ShellDependantCmdLine),
-			Shell:   c.PrependShell,
+			LineNum:     line,
+			RawText:     raw,
+			Command:     shellCommandText(c.ShellDependantCmdLine),
+			Shell:       c.PrependShell,
+			CacheMounts: cacheMountTargets(c),
 		}), nil
 
 	case *instructions.CopyCommand:
@@ -227,6 +228,27 @@ func shellCommandText(cmdLine instructions.ShellDependantCmdLine) string {
 		text += "\n" + file.Data
 	}
 	return text
+}
+
+// cacheMountTargets returns the target paths of a RUN's cache mounts. Files
+// written there live in the build cache, never in the image layer.
+func cacheMountTargets(c *instructions.RunCommand) []string {
+	// BuildKit defers every key=value mount option until variables can be
+	// expanded at build time, so until Expand runs each mount reads as a bind
+	// mount with no target. An identity expander resolves the options while
+	// leaving ${VAR} references as written. An invalid mount only costs us the
+	// cache-mount hint, so its error is not worth failing the parse over.
+	if err := c.Expand(func(word string) (string, error) { return word, nil }); err != nil {
+		return nil
+	}
+
+	var targets []string
+	for _, mount := range instructions.GetMounts(c) {
+		if mount.Type == instructions.MountTypeCache && mount.Target != "" {
+			targets = append(targets, mount.Target)
+		}
+	}
+	return targets
 }
 
 // splitImageRef splits an image reference into name, tag and digest.

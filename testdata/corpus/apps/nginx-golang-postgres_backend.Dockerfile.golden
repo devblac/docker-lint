@@ -1,0 +1,4 @@
+24:1 warning DL3009 apk add without --no-cache increases image size
+24:1 info DL3010 Found 2 consecutive RUN instructions that could be combined
+41:1 warning DL4002 No USER instruction in the final stage; container will run as root
+41:1 info DL5000 No HEALTHCHECK instruction found

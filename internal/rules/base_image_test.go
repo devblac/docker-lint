@@ -313,3 +313,66 @@ func TestIsSlimVariant(t *testing.T) {
 		})
 	}
 }
+
+func TestLargeBaseImageFinalImageOnly(t *testing.T) {
+	rule := &LargeBaseImageRule{}
+
+	tests := []struct {
+		name          string
+		froms         []*ast.FromInstruction
+		expectedCount int
+		expectedLine  int
+	}{
+		{
+			name: "large image only in a build stage",
+			froms: []*ast.FromInstruction{
+				{LineNum: 1, Image: "node", Tag: "lts", Alias: "build"},
+				{LineNum: 5, Image: "nginx", Tag: "alpine"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "final stage built on a large build stage",
+			froms: []*ast.FromInstruction{
+				{LineNum: 1, Image: "node", Tag: "lts", Alias: "development"},
+				{LineNum: 9, Image: "development", Alias: "dev-envs"},
+			},
+			expectedCount: 1,
+			expectedLine:  1,
+		},
+		{
+			name: "chain through several stages to a slim base",
+			froms: []*ast.FromInstruction{
+				{LineNum: 1, Image: "rust", Tag: "1.80", Alias: "builder"},
+				{LineNum: 4, Image: "debian", Tag: "bookworm-slim", Alias: "base"},
+				{LineNum: 6, Image: "base", Alias: "final"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "final stage from scratch",
+			froms: []*ast.FromInstruction{
+				{LineNum: 1, Image: "golang", Tag: "1.22", Alias: "build"},
+				{LineNum: 6, Image: "scratch"},
+			},
+			expectedCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dockerfile := &ast.Dockerfile{}
+			for _, from := range tt.froms {
+				dockerfile.Instructions = append(dockerfile.Instructions, from)
+			}
+
+			findings := rule.Check(dockerfile)
+			if len(findings) != tt.expectedCount {
+				t.Fatalf("expected %d findings, got %d", tt.expectedCount, len(findings))
+			}
+			if tt.expectedCount > 0 && findings[0].Line != tt.expectedLine {
+				t.Errorf("finding line = %d, want %d", findings[0].Line, tt.expectedLine)
+			}
+		})
+	}
+}

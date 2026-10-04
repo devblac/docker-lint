@@ -13,8 +13,10 @@ import (
 var (
 	// aptGetPattern matches apt-get install commands
 	aptGetInstallPattern = regexp.MustCompile(`apt-get\s+(install|upgrade)`)
-	// aptGetCleanPattern matches apt-get clean or rm -rf /var/lib/apt/lists
-	aptGetCleanPattern = regexp.MustCompile(`(apt-get\s+clean|rm\s+-rf?\s+/var/lib/apt/lists)`)
+	// aptGetCleanPattern matches the ways apt's package lists get removed:
+	// apt-get clean, apt dist-clean (apt >= 2.7, used by Debian trixie images)
+	// and rm -rf /var/lib/apt/lists in any flag order.
+	aptGetCleanPattern = regexp.MustCompile(`(apt(-get)?\s+(dist-)?clean|rm\s+-[a-zA-Z]+\s+/var/lib/apt/lists)`)
 
 	// yumInstallPattern matches yum/dnf install commands
 	yumInstallPattern = regexp.MustCompile(`(yum|dnf)\s+install`)
@@ -58,21 +60,26 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 
 		cmd := run.Command
 
+		// A cache mount keeps the package manager's cache out of the layer
+		// entirely, which is better than cleaning it afterwards.
+
 		// Check apt-get install without cleanup
-		if aptGetInstallPattern.MatchString(cmd) && !aptGetCleanPattern.MatchString(cmd) {
+		if aptGetInstallPattern.MatchString(cmd) && !aptGetCleanPattern.MatchString(cmd) &&
+			!hasCacheMountFor(run, "/var/lib/apt/lists") {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
 				Line:       run.Line(),
 				Column:     1,
 				Message:    "apt-get install without cache cleanup increases image size",
-				Suggestion: "Add 'apt-get clean && rm -rf /var/lib/apt/lists/*' in the same RUN instruction",
+				Suggestion: "Add 'rm -rf /var/lib/apt/lists/*' (or 'apt-get dist-clean') in the same RUN instruction, or use '--mount=type=cache,target=/var/lib/apt'",
 			})
 			continue
 		}
 
 		// Check yum/dnf install without cleanup
-		if yumInstallPattern.MatchString(cmd) && !yumCleanPattern.MatchString(cmd) {
+		if yumInstallPattern.MatchString(cmd) && !yumCleanPattern.MatchString(cmd) &&
+			!hasCacheMountFor(run, "/var/cache/yum", "/var/cache/dnf") {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -85,7 +92,8 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		}
 
 		// Check apk add without --no-cache
-		if apkAddPattern.MatchString(cmd) && !apkNoCachePattern.MatchString(cmd) {
+		if apkAddPattern.MatchString(cmd) && !apkNoCachePattern.MatchString(cmd) &&
+			!hasCacheMountFor(run, "/var/cache/apk", "/etc/apk/cache") {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -98,7 +106,7 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		}
 
 		// Check pip install without --no-cache-dir
-		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) {
+		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) && !hasPipCacheMount(run) {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -113,12 +121,43 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
+// hasCacheMountFor reports whether the RUN mounts a build cache over any of
+// the given paths, directly or through a parent directory.
+func hasCacheMountFor(run *ast.RunInstruction, paths ...string) bool {
+	for _, target := range run.CacheMounts {
+		target = strings.TrimRight(target, "/")
+		for _, p := range paths {
+			if target == p || strings.HasPrefix(p, target+"/") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasPipCacheMount reports whether the RUN mounts a build cache over pip's
+// cache, which lives in ~/.cache/pip for whichever user runs pip.
+func hasPipCacheMount(run *ast.RunInstruction) bool {
+	for _, target := range run.CacheMounts {
+		target = strings.TrimRight(target, "/")
+		if strings.HasSuffix(target, "/.cache/pip") || strings.HasSuffix(target, "/.cache") {
+			return true
+		}
+	}
+	return false
+}
+
 // ConsecutiveRunRule checks for consecutive RUN instructions that could be combined (DL3010).
+//
+// It is informational: with BuildKit, separate RUN steps are often deliberate,
+// trading a few layers for clearer, independently cached build steps. The
+// regression corpus showed it firing on three files out of four, including
+// Docker's own official images.
 type ConsecutiveRunRule struct{}
 
 func (r *ConsecutiveRunRule) ID() string             { return RuleConsecutiveRun }
 func (r *ConsecutiveRunRule) Name() string           { return "Consecutive RUN instructions" }
-func (r *ConsecutiveRunRule) Severity() ast.Severity { return ast.SeverityWarning }
+func (r *ConsecutiveRunRule) Severity() ast.Severity { return ast.SeverityInfo }
 
 func (r *ConsecutiveRunRule) Description() string {
 	return "Combine consecutive RUN instructions to reduce the number of layers"
@@ -253,6 +292,11 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 						if isDependencyManifestCopy(cp.sources) {
 							continue
 						}
+						// The RUN uses what this COPY brought in (a script, a
+						// config file), so the COPY has to stay before it.
+						if runReferencesCopy(v.Command, cp.sources) {
+							continue
+						}
 						findings = append(findings, ast.Finding{
 							RuleID:     r.ID(),
 							Severity:   r.Severity(),
@@ -268,6 +312,22 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 	}
 
 	return findings
+}
+
+// runReferencesCopy reports whether a command mentions a file brought in by a
+// COPY/ADD, which means the RUN depends on it. Only distinctive names count:
+// short names such as "." or "src" would match almost any command.
+func runReferencesCopy(command string, sources []string) bool {
+	for _, source := range sources {
+		name := path.Base(strings.TrimRight(source, "/"))
+		if len(name) < 4 || strings.ContainsAny(name, "*?[") {
+			continue
+		}
+		if strings.Contains(command, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // isPackageInstallCommand checks if a command is a package manager install

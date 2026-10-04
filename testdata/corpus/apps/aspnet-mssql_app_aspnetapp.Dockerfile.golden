@@ -1,0 +1,3 @@
+8:1 info DL3010 Found 2 consecutive RUN instructions that could be combined
+17:1 warning DL4002 No USER instruction in final stage 'final'; container will run as root
+17:1 info DL5000 No HEALTHCHECK instruction found

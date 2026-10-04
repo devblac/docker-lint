@@ -1,0 +1,2 @@
+101:1 warning DL4002 No USER instruction in the final stage; container will run as root
+101:1 info DL5000 No HEALTHCHECK instruction found

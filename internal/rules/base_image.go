@@ -122,45 +122,78 @@ func (r *LargeBaseImageRule) Name() string           { return "Large base image"
 func (r *LargeBaseImageRule) Severity() ast.Severity { return ast.SeverityWarning }
 
 func (r *LargeBaseImageRule) Description() string {
-	return "Consider using a smaller base image variant to reduce image size"
+	return "Consider a smaller variant (slim, alpine) for the base of the final image; build stages are not checked"
 }
 
+// Only the base of the final image matters for size: a large image used to
+// compile in an earlier stage is discarded unless the final stage builds on it.
 func (r *LargeBaseImageRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
-	var findings []ast.Finding
-
-	for _, from := range externalBaseImages(dockerfile) {
-		// A variable tag such as python:${PY_TAG} may well resolve to a slim
-		// variant, so only judge tags that are written out.
-		if containsVariable(from.Tag) {
-			continue
-		}
-
-		// Extract base image name (without registry prefix)
-		imageName := extractBaseImageName(from.Image)
-
-		// Check if it's a known large base image
-		alternative, isLarge := largeBaseImages[imageName]
-		if !isLarge {
-			continue
-		}
-
-		// Check if already using a slim/alpine variant
-		tag := strings.ToLower(from.Tag)
-		if isSlimVariant(tag) {
-			continue
-		}
-
-		findings = append(findings, ast.Finding{
-			RuleID:     r.ID(),
-			Severity:   r.Severity(),
-			Line:       from.Line(),
-			Column:     1,
-			Message:    "Image '" + from.Image + "' is a large base image",
-			Suggestion: "Consider using " + alternative + " for smaller image size",
-		})
+	from := finalImageBase(dockerfile)
+	if from == nil {
+		return nil
 	}
 
-	return findings
+	// A variable tag such as python:${PY_TAG} may well resolve to a slim
+	// variant, so only judge tags that are written out.
+	if containsVariable(from.Tag) {
+		return nil
+	}
+
+	// Extract base image name (without registry prefix)
+	imageName := extractBaseImageName(from.Image)
+
+	// Check if it's a known large base image
+	alternative, isLarge := largeBaseImages[imageName]
+	if !isLarge {
+		return nil
+	}
+
+	// Check if already using a slim/alpine variant
+	if isSlimVariant(strings.ToLower(from.Tag)) {
+		return nil
+	}
+
+	return []ast.Finding{{
+		RuleID:     r.ID(),
+		Severity:   r.Severity(),
+		Line:       from.Line(),
+		Column:     1,
+		Message:    "Image '" + from.Image + "' is a large base image for the final image",
+		Suggestion: "Consider using " + alternative + " for smaller image size",
+	}}
+}
+
+// finalImageBase returns the FROM instruction of the external image the final
+// stage is built from, following "FROM <stage>" references back through earlier
+// stages. It returns nil when the Dockerfile has no FROM.
+func finalImageBase(dockerfile *ast.Dockerfile) *ast.FromInstruction {
+	var froms []*ast.FromInstruction
+	for _, instr := range dockerfile.Instructions {
+		if from, ok := instr.(*ast.FromInstruction); ok {
+			froms = append(froms, from)
+		}
+	}
+
+	// Each step moves to a strictly earlier FROM, so this terminates.
+	idx := len(froms) - 1
+	for idx >= 0 {
+		from := froms[idx]
+		parent := -1
+		if from.Tag == "" && from.Digest == "" {
+			for j := idx - 1; j >= 0; j-- {
+				if froms[j].Alias != "" && strings.EqualFold(froms[j].Alias, from.Image) {
+					parent = j
+					break
+				}
+			}
+		}
+		if parent < 0 {
+			return from
+		}
+		idx = parent
+	}
+
+	return nil
 }
 
 // externalBaseImages returns the FROM instructions that pull an image from a
