@@ -11,7 +11,7 @@ import (
 // wildcardChars contains characters that indicate wildcard patterns
 var wildcardChars = []string{"*", "?", "["}
 
-// MultipleCMDRule checks for multiple CMD instructions in a Dockerfile (DL3001).
+// MultipleCMDRule checks for multiple CMD instructions in a Dockerfile (DKL401).
 type MultipleCMDRule struct{}
 
 func (r *MultipleCMDRule) ID() string             { return RuleMultipleCMD }
@@ -53,7 +53,7 @@ func (r *MultipleCMDRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// MultipleEntrypointRule checks for multiple ENTRYPOINT instructions in a Dockerfile (DL3002).
+// MultipleEntrypointRule checks for multiple ENTRYPOINT instructions in a Dockerfile (DKL402).
 type MultipleEntrypointRule struct{}
 
 func (r *MultipleEntrypointRule) ID() string             { return RuleMultipleEntrypoint }
@@ -95,7 +95,7 @@ func (r *MultipleEntrypointRule) Check(dockerfile *ast.Dockerfile) []ast.Finding
 	return findings
 }
 
-// RelativeWorkdirRule checks for WORKDIR instructions with relative paths (DL3003).
+// RelativeWorkdirRule checks for WORKDIR instructions with relative paths (DKL403).
 type RelativeWorkdirRule struct{}
 
 func (r *RelativeWorkdirRule) ID() string             { return RuleRelativeWorkdir }
@@ -158,7 +158,7 @@ func isAbsolutePath(path string) bool {
 	return false
 }
 
-// MissingHealthcheckRule checks for Dockerfiles without HEALTHCHECK instruction (DL5000).
+// MissingHealthcheckRule checks for Dockerfiles without HEALTHCHECK instruction (DKL404).
 //
 // It is informational: orchestrators such as Kubernetes ignore the Dockerfile
 // HEALTHCHECK and use their own probes, and the regression corpus showed the
@@ -210,7 +210,7 @@ func (r *MissingHealthcheckRule) Check(dockerfile *ast.Dockerfile) []ast.Finding
 	return findings
 }
 
-// WildcardCopyRule checks for wildcard patterns in COPY/ADD sources (DL5001).
+// WildcardCopyRule checks for wildcard patterns in COPY/ADD sources (DKL405).
 type WildcardCopyRule struct{}
 
 func (r *WildcardCopyRule) ID() string             { return RuleWildcardCopy }

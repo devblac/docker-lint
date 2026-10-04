@@ -38,7 +38,7 @@ var (
 	yumUpdatePattern    = regexp.MustCompile(`(yum|dnf)\s+(update|upgrade)`)
 )
 
-// CacheNotCleanedRule checks for package manager installs without cache cleanup (DL3009).
+// CacheNotCleanedRule checks for package manager installs without cache cleanup (DKL201).
 type CacheNotCleanedRule struct{}
 
 func (r *CacheNotCleanedRule) ID() string             { return RuleCacheNotCleaned }
@@ -147,7 +147,7 @@ func hasPipCacheMount(run *ast.RunInstruction) bool {
 	return false
 }
 
-// ConsecutiveRunRule checks for consecutive RUN instructions that could be combined (DL3010).
+// ConsecutiveRunRule checks for consecutive RUN instructions that could be combined (DKL202).
 //
 // It is informational: with BuildKit, separate RUN steps are often deliberate,
 // trading a few layers for clearer, independently cached build steps. The
@@ -225,7 +225,7 @@ func intToString(n int) string {
 	return digits
 }
 
-// SuboptimalOrderingRule checks for COPY/ADD before RUN that doesn't depend on copied files (DL3011).
+// SuboptimalOrderingRule checks for COPY/ADD before RUN that doesn't depend on copied files (DKL203).
 type SuboptimalOrderingRule struct{}
 
 func (r *SuboptimalOrderingRule) ID() string             { return RuleSuboptimalOrdering }
@@ -425,7 +425,7 @@ func isPackageFile(p string) bool {
 	return ok
 }
 
-// UpdateWithoutInstallRule checks for package update without install in same command (DL3012).
+// UpdateWithoutInstallRule checks for package update without install in same command (DKL204).
 type UpdateWithoutInstallRule struct{}
 
 func (r *UpdateWithoutInstallRule) ID() string             { return RuleUpdateWithoutInstall }

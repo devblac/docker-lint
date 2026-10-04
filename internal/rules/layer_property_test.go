@@ -48,7 +48,7 @@ func TestConsecutiveRunDetection(t *testing.T) {
 				return false
 			}
 
-			// Finding should be DL3010
+			// Finding should be DKL202
 			if findings[0].RuleID != RuleConsecutiveRun {
 				return false
 			}
@@ -172,7 +172,7 @@ func TestConsecutiveRunDetection(t *testing.T) {
 				return false
 			}
 
-			// Both findings should be DL3010
+			// Both findings should be DKL202
 			for _, f := range findings {
 				if f.RuleID != RuleConsecutiveRun {
 					return false

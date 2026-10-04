@@ -9,11 +9,11 @@ import (
 func TestSecurityRulesRegistered(t *testing.T) {
 	// Verify all security rules are registered
 	expectedRules := []string{
-		RuleSecretInEnv, // DL4000
-		RuleSecretInArg, // DL4001
-		RuleNoUser,      // DL4002
-		RuleAddWithURL,  // DL4003
-		RuleAddOverCopy, // DL4004
+		RuleSecretInEnv, // DKL301
+		RuleSecretInArg, // DKL302
+		RuleNoUser,      // DKL303
+		RuleAddWithURL,  // DKL304
+		RuleAddOverCopy, // DKL305
 	}
 
 	for _, ruleID := range expectedRules {
@@ -431,7 +431,7 @@ func TestAddOverCopyRule(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
-			name: "ADD with URL - no warning (handled by DL4003)",
+			name: "ADD with URL - no warning (handled by DKL304)",
 			dockerfile: &ast.Dockerfile{
 				Instructions: []ast.Instruction{
 					&ast.AddInstruction{LineNum: 1, Sources: []string{"http://example.com/file"}, Dest: "/app/"},

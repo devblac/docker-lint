@@ -110,7 +110,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return ExitFatal
 	}
 
-	anlzr := analyzer.NewWithDefaults(analyzer.Config{IgnoreRules: parseIgnoreList(ignoreCSV)})
+	ignoreRules := parseIgnoreList(ignoreCSV)
+	warnUnknownRules(ignoreRules, stderr)
+
+	anlzr := analyzer.NewWithDefaults(analyzer.Config{IgnoreRules: ignoreRules})
 	findings := anlzr.Analyze(dockerfile)
 
 	var formatErr error
@@ -157,6 +160,22 @@ func parseIgnoreList(csv string) []string {
 		}
 	}
 	return result
+}
+
+// warnUnknownRules reports --ignore entries that match no rule, which would
+// otherwise silently ignore nothing. IDs from before the DKL rename get their
+// replacement named.
+func warnUnknownRules(ids []string, stderr io.Writer) {
+	for _, id := range ids {
+		if rules.DefaultRegistry.Get(id) != nil {
+			continue
+		}
+		if replacement, ok := rules.LegacyRuleIDs[id]; ok {
+			fmt.Fprintf(stderr, "Warning: rule %s was renamed to %s; --ignore %s has no effect\n", id, replacement, id)
+			continue
+		}
+		fmt.Fprintf(stderr, "Warning: unknown rule %s in --ignore; run --rules to list available rules\n", id)
+	}
 }
 
 func printUsage(w io.Writer) {

@@ -19,22 +19,22 @@ first review found 21 false positives, all fixed in the same change:
 
 | Rule | False positives | Cause |
 |---|---|---|
-| DL3008 | 8 | Large images used only to compile in a build stage |
-| DL3009 | 6 | `apt-get dist-clean`, used by Debian trixie official images, not recognised |
-| DL3009 | 5 | `pip install` under `--mount=type=cache` flagged for a cache that never reaches the layer |
-| DL3011 | 2 | A COPY the install step depends on (it runs the copied script) |
+| DKL103 | 8 | Large images used only to compile in a build stage |
+| DKL201 | 6 | `apt-get dist-clean`, used by Debian trixie official images, not recognised |
+| DKL201 | 5 | `pip install` under `--mount=type=cache` flagged for a cache that never reaches the layer |
+| DKL203 | 2 | A COPY the install step depends on (it runs the copied script) |
 
 The same review recalibrated two rules to `info`, because they fired almost
-everywhere: DL5000 (missing HEALTHCHECK) on 51 of 52 files and DL3010
+everywhere: DKL404 (missing HEALTHCHECK) on 51 of 52 files and DKL202
 (consecutive RUN) on 39 of 52.
 
-Known remaining false positive, left on purpose: DL3009 flags
+Known remaining false positive, left on purpose: DKL201 flags
 `official/python/3.14_windows_windowsservercore-ltsc2022.Dockerfile` because the
 text "pip install" appears inside a `Write-Host` message. Telling a command
 from a string needs real shell parsing; a regex anchor would miss common forms
 such as `DEBIAN_FRONTEND=noninteractive apt-get install`.
 
-DL4002 fires on 16 of the 17 official images. That is accurate - they run as
+DKL303 fires on 16 of the 17 official images. That is accurate - they run as
 root - and by design: they are base images whose entrypoints drop privileges at
 runtime. Application Dockerfiles are the audience the rule is written for.
 

@@ -36,7 +36,7 @@ RUN apt-get update
 		}
 	}
 	if !hasMissingTag {
-		t.Error("Expected DL3006 (missing tag) finding")
+		t.Error("Expected DKL101 (missing tag) finding")
 	}
 }
 
@@ -58,14 +58,14 @@ RUN apt-get update
 	// Should NOT have the missing tag finding
 	for _, f := range findings {
 		if f.RuleID == rules.RuleMissingTag {
-			t.Error("Expected DL3006 to be ignored but it was reported")
+			t.Error("Expected DKL101 to be ignored but it was reported")
 		}
 	}
 }
 
 func TestAnalyzer_Analyze_InlineIgnore(t *testing.T) {
 	// Dockerfile with inline ignore comment
-	dockerfile := `# docker-lint ignore: DL3006
+	dockerfile := `# docker-lint ignore: DKL101
 FROM ubuntu
 RUN apt-get update
 `
@@ -80,14 +80,14 @@ RUN apt-get update
 	// Should NOT have the missing tag finding for line 2 (ubuntu)
 	for _, f := range findings {
 		if f.RuleID == rules.RuleMissingTag && f.Line == 2 {
-			t.Error("Expected DL3006 to be ignored via inline comment but it was reported")
+			t.Error("Expected DKL101 to be ignored via inline comment but it was reported")
 		}
 	}
 }
 
 func TestAnalyzer_Analyze_InlineIgnoreMultipleRules(t *testing.T) {
 	// Dockerfile with inline ignore for multiple rules
-	dockerfile := `# docker-lint ignore: DL3006, DL3008
+	dockerfile := `# docker-lint ignore: DKL101, DKL103
 FROM ubuntu
 RUN apt-get update
 `
@@ -99,7 +99,7 @@ RUN apt-get update
 	analyzer := NewWithDefaults(Config{})
 	findings := analyzer.Analyze(df)
 
-	// Should NOT have DL3006 or DL3008 for line 2
+	// Should NOT have DKL101 or DKL103 for line 2
 	for _, f := range findings {
 		if f.Line == 2 && (f.RuleID == rules.RuleMissingTag || f.RuleID == rules.RuleLargeBaseImage) {
 			t.Errorf("Expected %s to be ignored via inline comment but it was reported", f.RuleID)
@@ -183,7 +183,7 @@ RUN apt-get update
 	// Should only have findings from the specified rule
 	for _, f := range findings {
 		if f.RuleID != rules.RuleMissingTag {
-			t.Errorf("Expected only DL3006 findings, got %s", f.RuleID)
+			t.Errorf("Expected only DKL101 findings, got %s", f.RuleID)
 		}
 	}
 
@@ -196,7 +196,7 @@ RUN apt-get update
 		}
 	}
 	if !hasMissingTag {
-		t.Error("Expected DL3006 finding")
+		t.Error("Expected DKL101 finding")
 	}
 }
 
@@ -260,7 +260,7 @@ RUN apt-get update
 	// Should only have findings from the registered rule
 	for _, f := range findings {
 		if f.RuleID != rules.RuleMissingTag {
-			t.Errorf("Expected only DL3006 findings from custom registry, got %s", f.RuleID)
+			t.Errorf("Expected only DKL101 findings from custom registry, got %s", f.RuleID)
 		}
 	}
 }
@@ -289,7 +289,7 @@ FROM alpine
 
 func TestAnalyzer_Analyze_InlineIgnoreOnlyAffectsNextLine(t *testing.T) {
 	// The inline ignore should only affect line 2, not line 3
-	dockerfile := `# docker-lint ignore: DL3006
+	dockerfile := `# docker-lint ignore: DKL101
 FROM ubuntu
 FROM debian
 `
@@ -321,7 +321,7 @@ FROM debian
 }
 
 func TestAnalyzer_Analyze_CombinedGlobalAndInlineIgnore(t *testing.T) {
-	dockerfile := `# docker-lint ignore: DL3008
+	dockerfile := `# docker-lint ignore: DKL103
 FROM ubuntu
 `
 	df, err := parser.ParseString(dockerfile)
@@ -329,20 +329,20 @@ FROM ubuntu
 		t.Fatalf("Failed to parse Dockerfile: %v", err)
 	}
 
-	// Global ignore for DL3006, inline ignore for DL3008
+	// Global ignore for DKL101, inline ignore for DKL103
 	analyzer := NewWithDefaults(Config{
 		IgnoreRules: []string{rules.RuleMissingTag},
 	})
 	findings := analyzer.Analyze(df)
 
-	// Neither DL3006 nor DL3008 should appear for line 2
+	// Neither DKL101 nor DKL103 should appear for line 2
 	for _, f := range findings {
 		if f.Line == 2 {
 			if f.RuleID == rules.RuleMissingTag {
-				t.Error("DL3006 should be globally ignored")
+				t.Error("DKL101 should be globally ignored")
 			}
 			if f.RuleID == rules.RuleLargeBaseImage {
-				t.Error("DL3008 should be ignored via inline comment")
+				t.Error("DKL103 should be ignored via inline comment")
 			}
 		}
 	}
@@ -369,7 +369,7 @@ CMD ["./app"]
 	findings := analyzer.Analyze(df)
 
 	// Should parse and analyze without errors
-	// The second stage has USER instruction, so DL4002 should not fire for it
+	// The second stage has USER instruction, so DKL303 should not fire for it
 	// (depending on rule implementation - this tests that multi-stage works)
 	if df == nil {
 		t.Error("Expected parsed Dockerfile")
@@ -381,7 +381,7 @@ CMD ["./app"]
 
 func TestAnalyzer_Analyze_InlineIgnoreCaseInsensitive(t *testing.T) {
 	// Test that inline ignore parsing is case-insensitive
-	dockerfile := `# DOCKER-LINT IGNORE: DL3006
+	dockerfile := `# DOCKER-LINT IGNORE: DKL101
 FROM ubuntu
 `
 	df, err := parser.ParseString(dockerfile)
@@ -392,10 +392,10 @@ FROM ubuntu
 	analyzer := NewWithDefaults(Config{})
 	findings := analyzer.Analyze(df)
 
-	// DL3006 should be ignored even with uppercase comment
+	// DKL101 should be ignored even with uppercase comment
 	for _, f := range findings {
 		if f.RuleID == rules.RuleMissingTag && f.Line == 2 {
-			t.Error("DL3006 should be ignored via case-insensitive inline comment")
+			t.Error("DKL101 should be ignored via case-insensitive inline comment")
 		}
 	}
 }
@@ -481,13 +481,13 @@ CMD ["node", "server.js"]
 	}
 
 	// Expected findings:
-	// - DL3007: latest tag
-	// - DL3003: relative WORKDIR
-	// - DL4000: secret in ENV
-	// - DL3010: consecutive RUN
-	// - DL4003: ADD with URL
-	// - DL4002: no USER
-	// - DL5000: no HEALTHCHECK
+	// - DKL102: latest tag
+	// - DKL403: relative WORKDIR
+	// - DKL301: secret in ENV
+	// - DKL202: consecutive RUN
+	// - DKL304: ADD with URL
+	// - DKL303: no USER
+	// - DKL404: no HEALTHCHECK
 
 	expectedRules := []string{
 		rules.RuleLatestTag,

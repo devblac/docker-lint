@@ -26,7 +26,7 @@ var largeBaseImages = map[string]string{
 	"rust":        "rust:*-slim or rust:*-alpine",
 }
 
-// MissingTagRule checks for FROM instructions without explicit image tags (DL3006).
+// MissingTagRule checks for FROM instructions without explicit image tags (DKL101).
 type MissingTagRule struct{}
 
 func (r *MissingTagRule) ID() string             { return RuleMissingTag }
@@ -73,7 +73,7 @@ func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// LatestTagRule checks for FROM instructions using the 'latest' tag (DL3007).
+// LatestTagRule checks for FROM instructions using the 'latest' tag (DKL102).
 type LatestTagRule struct{}
 
 func (r *LatestTagRule) ID() string             { return RuleLatestTag }
@@ -114,7 +114,7 @@ func (r *LatestTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// LargeBaseImageRule checks for large base images without slim variants (DL3008).
+// LargeBaseImageRule checks for large base images without slim variants (DKL103).
 type LargeBaseImageRule struct{}
 
 func (r *LargeBaseImageRule) ID() string             { return RuleLargeBaseImage }

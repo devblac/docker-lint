@@ -9,9 +9,9 @@ import (
 func TestBaseImageRulesRegistered(t *testing.T) {
 	// Verify all base image rules are registered
 	expectedRules := []string{
-		RuleMissingTag,     // DL3006
-		RuleLatestTag,      // DL3007
-		RuleLargeBaseImage, // DL3008
+		RuleMissingTag,     // DKL101
+		RuleLatestTag,      // DKL102
+		RuleLargeBaseImage, // DKL103
 	}
 
 	for _, ruleID := range expectedRules {

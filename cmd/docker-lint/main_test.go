@@ -138,10 +138,10 @@ func TestRulesListing(t *testing.T) {
 
 	// Check for some known rule IDs
 	expectedRules := []string{
-		"DL3006", // Missing explicit image tag
-		"DL3007", // Using 'latest' tag
-		"DL4002", // No USER instruction
-		"DL5000", // Missing HEALTHCHECK
+		"DKL101", // Missing explicit image tag
+		"DKL102", // Using 'latest' tag
+		"DKL303", // No USER instruction
+		"DKL404", // Missing HEALTHCHECK
 	}
 
 	for _, rule := range expectedRules {
@@ -189,8 +189,8 @@ RUN echo "hello"
 
 	output := stdout.String()
 	// Should contain warning about missing tag
-	if !strings.Contains(output, "DL3006") {
-		t.Errorf("expected warning about image tag (DL3006), got: %s", output)
+	if !strings.Contains(output, "DKL101") {
+		t.Errorf("expected warning about image tag (DKL101), got: %s", output)
 	}
 }
 
@@ -307,23 +307,23 @@ CMD ["echo", "hello"]
 // TestIgnoreFlag tests that --ignore flag excludes specified rules.
 // Requirements: 8.1
 func TestIgnoreFlag(t *testing.T) {
-	// Dockerfile that would trigger DL3006 (missing tag)
+	// Dockerfile that would trigger DKL101 (missing tag)
 	dockerfile := `FROM alpine
 RUN echo "hello"
 `
 	path := createTempDockerfile(t, dockerfile)
 	var stdout, stderr bytes.Buffer
 
-	exitCode := run([]string{"--ignore", "DL3006", path}, nil, &stdout, &stderr)
+	exitCode := run([]string{"--ignore", "DKL101", path}, nil, &stdout, &stderr)
 
 	if exitCode != ExitSuccess {
 		t.Errorf("expected exit code %d, got %d", ExitSuccess, exitCode)
 	}
 
 	output := stdout.String()
-	// DL3006 should not appear in output
-	if strings.Contains(output, "DL3006") {
-		t.Errorf("DL3006 should be ignored but appeared in output: %s", output)
+	// DKL101 should not appear in output
+	if strings.Contains(output, "DKL101") {
+		t.Errorf("DKL101 should be ignored but appeared in output: %s", output)
 	}
 }
 
@@ -336,14 +336,14 @@ RUN echo "hello"
 	path := createTempDockerfile(t, dockerfile)
 	var stdout, stderr bytes.Buffer
 
-	exitCode := run([]string{"--ignore", "DL3006,DL4002,DL5000", path}, nil, &stdout, &stderr)
+	exitCode := run([]string{"--ignore", "DKL101,DKL303,DKL404", path}, nil, &stdout, &stderr)
 
 	if exitCode != ExitSuccess {
 		t.Errorf("expected exit code %d, got %d", ExitSuccess, exitCode)
 	}
 
 	output := stdout.String()
-	ignoredRules := []string{"DL3006", "DL4002", "DL5000"}
+	ignoredRules := []string{"DKL101", "DKL303", "DKL404"}
 	for _, rule := range ignoredRules {
 		if strings.Contains(output, rule) {
 			t.Errorf("rule %s should be ignored but appeared in output", rule)
@@ -546,7 +546,7 @@ func TestIgnoreWithStrict(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
 	// Ignore all rules that would trigger warnings
-	exitCode := run([]string{"--strict", "--ignore", "DL3006,DL4002,DL5000", path}, nil, &stdout, &stderr)
+	exitCode := run([]string{"--strict", "--ignore", "DKL101,DKL303,DKL404", path}, nil, &stdout, &stderr)
 
 	// Should succeed since all warning-producing rules are ignored
 	if exitCode != ExitSuccess {
@@ -582,7 +582,7 @@ CMD ["/main"]
 // TestInlineIgnoreComment tests inline ignore comments.
 // Requirements: 8.3
 func TestInlineIgnoreComment(t *testing.T) {
-	dockerfile := `# docker-lint ignore: DL3006
+	dockerfile := `# docker-lint ignore: DKL101
 FROM alpine
 USER nobody
 HEALTHCHECK CMD echo ok
@@ -597,9 +597,9 @@ HEALTHCHECK CMD echo ok
 	}
 
 	output := stdout.String()
-	// DL3006 should be ignored for the FROM line
-	if strings.Contains(output, "DL3006") {
-		t.Errorf("DL3006 should be ignored via inline comment, got: %s", output)
+	// DKL101 should be ignored for the FROM line
+	if strings.Contains(output, "DKL101") {
+		t.Errorf("DKL101 should be ignored via inline comment, got: %s", output)
 	}
 }
 
@@ -753,5 +753,56 @@ func TestPrintVersionWithBuildInfo(t *testing.T) {
 	}
 	if !strings.Contains(output, "2025-01-01") {
 		t.Errorf("version output should include date, got: %s", output)
+	}
+}
+
+// TestIgnoreLegacyRuleIDWarns verifies that a pre-rename DLxxxx ID in --ignore
+// names its replacement instead of silently ignoring nothing.
+func TestIgnoreLegacyRuleIDWarns(t *testing.T) {
+	path := createTempDockerfile(t, "FROM alpine\nUSER nobody\n")
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run([]string{"--ignore", "DL3006", path}, nil, &stdout, &stderr)
+
+	if exitCode != ExitSuccess {
+		t.Errorf("expected exit code %d, got %d", ExitSuccess, exitCode)
+	}
+	if !strings.Contains(stderr.String(), "DL3006 was renamed to DKL101") {
+		t.Errorf("expected rename hint on stderr, got: %q", stderr.String())
+	}
+	// Legacy IDs are not aliases: the rule still fires.
+	if !strings.Contains(stdout.String(), "DKL101") {
+		t.Errorf("expected DKL101 to still be reported, got: %q", stdout.String())
+	}
+}
+
+// TestIgnoreUnknownRuleWarns verifies that a typo in --ignore is reported.
+func TestIgnoreUnknownRuleWarns(t *testing.T) {
+	path := createTempDockerfile(t, "FROM alpine:3.20\nUSER nobody\n")
+	var stdout, stderr bytes.Buffer
+
+	run([]string{"--ignore", "DKL999,DKL101", path}, nil, &stdout, &stderr)
+
+	if !strings.Contains(stderr.String(), "unknown rule DKL999") {
+		t.Errorf("expected unknown-rule warning on stderr, got: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "DKL101") {
+		t.Errorf("a valid rule ID must not be warned about: %q", stderr.String())
+	}
+}
+
+// TestNoFromIsLintError verifies that a Dockerfile Docker cannot build fails
+// the lint run even without --strict.
+func TestNoFromIsLintError(t *testing.T) {
+	path := createTempDockerfile(t, "RUN echo hi\n")
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run([]string{path}, nil, &stdout, &stderr)
+
+	if exitCode != ExitLintErrors {
+		t.Errorf("expected exit code %d, got %d; output: %s", ExitLintErrors, exitCode, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "[error] DKL001") {
+		t.Errorf("expected DKL001 error, got: %q", stdout.String())
 	}
 }

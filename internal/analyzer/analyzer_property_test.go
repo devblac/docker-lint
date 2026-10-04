@@ -495,11 +495,11 @@ func genDockerfileWithIssues() gopter.Gen {
 			// Ensure first instruction is FROM (potentially with issues)
 			if len(instructions) > 0 {
 				if _, ok := instructions[0].(*ast.FromInstruction); !ok {
-					// Use FROM without tag to trigger DL3006
+					// Use FROM without tag to trigger DKL101
 					instructions[0] = &ast.FromInstruction{
 						LineNum: 1,
 						Image:   "ubuntu",
-						Tag:     "", // Missing tag triggers DL3006
+						Tag:     "", // Missing tag triggers DKL101
 					}
 				}
 			}
@@ -550,13 +550,13 @@ func genFromWithIssues() gopter.Gen {
 	return gen.IntRange(0, 3).Map(func(choice int) ast.Instruction {
 		switch choice {
 		case 0:
-			// Missing tag (DL3006)
+			// Missing tag (DKL101)
 			return &ast.FromInstruction{LineNum: 1, Image: "ubuntu", Tag: ""}
 		case 1:
-			// Latest tag (DL3007)
+			// Latest tag (DKL102)
 			return &ast.FromInstruction{LineNum: 1, Image: "alpine", Tag: "latest"}
 		case 2:
-			// Large base image (DL3008)
+			// Large base image (DKL103)
 			return &ast.FromInstruction{LineNum: 1, Image: "ubuntu", Tag: "22.04"}
 		default:
 			return &ast.FromInstruction{LineNum: 1, Image: "debian", Tag: "bullseye"}
@@ -567,9 +567,9 @@ func genFromWithIssues() gopter.Gen {
 // genRunWithIssues generates RUN instructions that trigger rules.
 func genRunWithIssues() gopter.Gen {
 	commands := []string{
-		// Cache not cleaned (DL3009)
+		// Cache not cleaned (DKL201)
 		"apt-get install -y curl",
-		// Update without install (DL3012)
+		// Update without install (DKL204)
 		"apt-get update",
 		// Simple command (may trigger consecutive RUN if multiple)
 		"echo hello",
@@ -586,7 +586,7 @@ func genRunWithIssues() gopter.Gen {
 // genEnvWithSecrets generates ENV instructions with secret-like keys.
 func genEnvWithSecrets() gopter.Gen {
 	pairs := [][]string{
-		// Secret patterns (DL4000)
+		// Secret patterns (DKL301)
 		{"PASSWORD", "secret123"},
 		{"API_KEY", "abc123"},
 		{"SECRET_TOKEN", "xyz789"},
@@ -606,7 +606,7 @@ func genEnvWithSecrets() gopter.Gen {
 // genArgWithSecrets generates ARG instructions with secret-like names.
 func genArgWithSecrets() gopter.Gen {
 	pairs := [][]string{
-		// Secret patterns (DL4001)
+		// Secret patterns (DKL302)
 		{"PASSWORD", "default_pass"},
 		{"API_KEY", ""},
 		{"SECRET", "mysecret"},
@@ -625,7 +625,7 @@ func genArgWithSecrets() gopter.Gen {
 // genWorkdirRelative generates WORKDIR with relative paths.
 func genWorkdirRelative() gopter.Gen {
 	paths := []string{
-		// Relative paths (DL3003)
+		// Relative paths (DKL403)
 		"app",
 		"src/app",
 		"./build",
@@ -644,9 +644,9 @@ func genWorkdirRelative() gopter.Gen {
 // genAddWithIssues generates ADD instructions that trigger rules.
 func genAddWithIssues() gopter.Gen {
 	pairs := [][]string{
-		// ADD with URL (DL4003)
+		// ADD with URL (DKL304)
 		{"https://example.com/file.tar.gz", "/app/"},
-		// ADD where COPY would suffice (DL4004)
+		// ADD where COPY would suffice (DKL305)
 		{"package.json", "/app/"},
 		{"src/", "/app/src/"},
 	}
@@ -662,7 +662,7 @@ func genAddWithIssues() gopter.Gen {
 // genCopyWithWildcard generates COPY instructions with wildcards.
 func genCopyWithWildcard() gopter.Gen {
 	pairs := [][]string{
-		// Wildcard patterns (DL5001)
+		// Wildcard patterns (DKL405)
 		{"*.go", "/app/"},
 		{"src/*", "/app/src/"},
 		// Normal COPY

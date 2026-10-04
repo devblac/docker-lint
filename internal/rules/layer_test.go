@@ -9,10 +9,10 @@ import (
 func TestLayerRulesRegistered(t *testing.T) {
 	// Verify all layer optimization rules are registered
 	expectedRules := []string{
-		RuleCacheNotCleaned,      // DL3009
-		RuleConsecutiveRun,       // DL3010
-		RuleSuboptimalOrdering,   // DL3011
-		RuleUpdateWithoutInstall, // DL3012
+		RuleCacheNotCleaned,      // DKL201
+		RuleConsecutiveRun,       // DKL202
+		RuleSuboptimalOrdering,   // DKL203
+		RuleUpdateWithoutInstall, // DKL204
 	}
 
 	for _, ruleID := range expectedRules {

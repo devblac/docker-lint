@@ -646,26 +646,26 @@ func TestParseInlineIgnoreComments(t *testing.T) {
 		{
 			name: "single rule ignore",
 			input: `FROM alpine
-# docker-lint ignore: DL3006
+# docker-lint ignore: DKL101
 FROM ubuntu`,
 			expectedLine:   3,
-			expectedRuleID: "DL3006",
+			expectedRuleID: "DKL101",
 		},
 		{
 			name: "multiple rules ignore",
 			input: `FROM alpine
-# docker-lint ignore: DL3006, DL3007
+# docker-lint ignore: DKL101, DKL102
 FROM ubuntu:latest`,
 			expectedLine:   3,
-			expectedRuleID: "DL3006",
+			expectedRuleID: "DKL101",
 		},
 		{
 			name: "case insensitive",
 			input: `FROM alpine
-# Docker-Lint Ignore: DL4000
+# Docker-Lint Ignore: DKL301
 ENV PASSWORD=secret`,
 			expectedLine:   3,
-			expectedRuleID: "DL4000",
+			expectedRuleID: "DKL301",
 		},
 	}
 
@@ -699,7 +699,7 @@ ENV PASSWORD=secret`,
 // TestParseInlineIgnoreMultipleRules tests extraction of multiple rules from a single ignore comment.
 func TestParseInlineIgnoreMultipleRules(t *testing.T) {
 	input := `FROM alpine
-# docker-lint ignore: DL3006, DL3007, DL3008
+# docker-lint ignore: DKL101, DKL102, DKL103
 FROM ubuntu`
 
 	df, err := ParseString(input)
@@ -712,7 +712,7 @@ FROM ubuntu`
 		t.Fatal("no inline ignores for line 3")
 	}
 
-	expectedRules := []string{"DL3006", "DL3007", "DL3008"}
+	expectedRules := []string{"DKL101", "DKL102", "DKL103"}
 	if len(rules) != len(expectedRules) {
 		t.Errorf("len(rules) = %d, want %d", len(rules), len(expectedRules))
 	}

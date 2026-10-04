@@ -138,10 +138,10 @@ func genFinding() gopter.Gen {
 
 func genRuleID() gopter.Gen {
 	return gen.OneConstOf(
-		"DL3000", "DL3001", "DL3002", "DL3003", "DL3006", "DL3007",
-		"DL3008", "DL3009", "DL3010", "DL3011", "DL3012",
-		"DL4000", "DL4001", "DL4002", "DL4003", "DL4004",
-		"DL5000", "DL5001",
+		"DKL001", "DKL401", "DKL402", "DKL403", "DKL101", "DKL102",
+		"DKL103", "DKL201", "DKL202", "DKL203", "DKL204",
+		"DKL301", "DKL302", "DKL303", "DKL304", "DKL305",
+		"DKL404", "DKL405",
 	)
 }
 

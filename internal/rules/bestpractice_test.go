@@ -9,11 +9,11 @@ import (
 func TestBestPracticeRulesRegistered(t *testing.T) {
 	// Verify all best practice rules are registered
 	expectedRules := []string{
-		RuleMultipleCMD,        // DL3001
-		RuleMultipleEntrypoint, // DL3002
-		RuleRelativeWorkdir,    // DL3003
-		RuleMissingHealthcheck, // DL5000
-		RuleWildcardCopy,       // DL5001
+		RuleMultipleCMD,        // DKL401
+		RuleMultipleEntrypoint, // DKL402
+		RuleRelativeWorkdir,    // DKL403
+		RuleMissingHealthcheck, // DKL404
+		RuleWildcardCopy,       // DKL405
 	}
 
 	for _, ruleID := range expectedRules {

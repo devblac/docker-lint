@@ -237,9 +237,9 @@ func genFindingNoError() gopter.Gen {
 // genRuleID generates a random rule ID.
 func genRuleID() gopter.Gen {
 	return gen.OneConstOf(
-		"DL3006", "DL3007", "DL3008", "DL3009", "DL3010",
-		"DL4000", "DL4001", "DL4002", "DL4003", "DL4004",
-		"DL5000", "DL5001", "DL3001", "DL3002", "DL3003",
+		"DKL101", "DKL102", "DKL103", "DKL201", "DKL202",
+		"DKL301", "DKL302", "DKL303", "DKL304", "DKL305",
+		"DKL404", "DKL405", "DKL401", "DKL402", "DKL403",
 	)
 }
 

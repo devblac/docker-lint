@@ -83,7 +83,7 @@ var archiveExtensions = []string{
 	".zip", ".gz", ".bz2", ".xz",
 }
 
-// SecretInEnvRule checks for potential secrets in ENV instructions (DL4000).
+// SecretInEnvRule checks for potential secrets in ENV instructions (DKL301).
 type SecretInEnvRule struct{}
 
 func (r *SecretInEnvRule) ID() string             { return RuleSecretInEnv }
@@ -124,7 +124,7 @@ func (r *SecretInEnvRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// SecretInArgRule checks for potential secrets in ARG instructions (DL4001).
+// SecretInArgRule checks for potential secrets in ARG instructions (DKL302).
 type SecretInArgRule struct{}
 
 func (r *SecretInArgRule) ID() string             { return RuleSecretInArg }
@@ -160,7 +160,7 @@ func (r *SecretInArgRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// NoUserRule checks that the final image does not run as root (DL4002).
+// NoUserRule checks that the final image does not run as root (DKL303).
 //
 // Only the final stage matters: earlier stages are discarded after the build,
 // and they often need root to install packages. The final stage inherits the
@@ -286,7 +286,7 @@ func lastLine(stage ast.Stage) int {
 	return 1
 }
 
-// AddWithURLRule checks for ADD instructions with URL sources (DL4003).
+// AddWithURLRule checks for ADD instructions with URL sources (DKL304).
 type AddWithURLRule struct{}
 
 func (r *AddWithURLRule) ID() string             { return RuleAddWithURL }
@@ -325,7 +325,7 @@ func (r *AddWithURLRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// AddOverCopyRule checks for ADD where COPY would suffice (DL4004).
+// AddOverCopyRule checks for ADD where COPY would suffice (DKL305).
 type AddOverCopyRule struct{}
 
 func (r *AddOverCopyRule) ID() string             { return RuleAddOverCopy }
@@ -345,7 +345,7 @@ func (r *AddOverCopyRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 			continue
 		}
 
-		// Check if ADD is being used for URL (handled by DL4003)
+		// Check if ADD is being used for URL (handled by DKL304)
 		hasURL := false
 		hasArchive := false
 

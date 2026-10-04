@@ -69,7 +69,7 @@ USER app
 func TestParseHeredocBodyIsNotComment(t *testing.T) {
 	input := `FROM alpine:3.20
 RUN <<EOT
-# docker-lint ignore: DL3007
+# docker-lint ignore: DKL102
 echo hello
 EOT
 `
@@ -333,7 +333,7 @@ func TestParseCommentInsideContinuation(t *testing.T) {
 func TestParseInlineIgnoreAcrossBlankLines(t *testing.T) {
 	input := "FROM alpine:3.20\n" +
 		"\n" +
-		"# docker-lint ignore: DL3007\n" +
+		"# docker-lint ignore: DKL102\n" +
 		"\n" +
 		"FROM ubuntu:latest\n"
 
@@ -346,7 +346,7 @@ func TestParseInlineIgnoreAcrossBlankLines(t *testing.T) {
 	if !ok {
 		t.Fatalf("no inline ignores for line 5: %v", df.InlineIgnores)
 	}
-	if len(rules) != 1 || rules[0] != "DL3007" {
-		t.Errorf("InlineIgnores[5] = %v, want [DL3007]", rules)
+	if len(rules) != 1 || rules[0] != "DKL102" {
+		t.Errorf("InlineIgnores[5] = %v, want [DKL102]", rules)
 	}
 }

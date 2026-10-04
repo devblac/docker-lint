@@ -1,5 +1,5 @@
-5:1 warning DL3009 apt-get install without cache cleanup increases image size
-5:1 info DL3010 Found 2 consecutive RUN instructions that could be combined
-20:1 info DL3010 Found 2 consecutive RUN instructions that could be combined
-29:1 warning DL4002 No USER instruction in the final stage; container will run as root
-29:1 info DL5000 No HEALTHCHECK instruction found
+5:1 warning DKL201 apt-get install without cache cleanup increases image size
+5:1 info DKL202 Found 2 consecutive RUN instructions that could be combined
+20:1 info DKL202 Found 2 consecutive RUN instructions that could be combined
+29:1 warning DKL303 No USER instruction in the final stage; container will run as root
+29:1 info DKL404 No HEALTHCHECK instruction found
