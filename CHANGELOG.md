@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release pipeline: prebuilt binaries for Linux, macOS and Windows (amd64 and
   arm64) with checksums, built by GoReleaser from a tag into a draft release;
   CI builds a snapshot release on every pull request
+- `--format` flag selecting `text`, `json`, `sarif` or `github`; `--json` stays as
+  a shorthand for `--format json`
+- SARIF 2.1.0 output for GitHub code scanning and other security dashboards,
+  validated against the official schema
+- GitHub annotations output, which shows findings on pull request diffs in any
+  repository, without code scanning
+- GitHub Action (`uses: devblac/docker-lint@<tag>`) that installs a
+  checksum-verified release binary, annotates pull requests and can upload
+  SARIF to code scanning; tested on Linux, macOS and Windows runners
 
 ### Changed
 - **Breaking:** rule IDs move from `DLxxxx`, which collide with hadolint's IDs for
