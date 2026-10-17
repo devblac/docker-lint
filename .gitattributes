@@ -1,3 +1,6 @@
 # The regression corpus is compared byte-for-byte against golden files, so keep
 # it LF on every platform regardless of core.autocrlf.
 testdata/corpus/** text eol=lf
+
+# Shell scripts must stay LF to run under sh.
+*.sh text eol=lf

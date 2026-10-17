@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docker build` rejects but BuildKit's parser accepts
 - `--ignore` warns about rule IDs that match no rule, and names the replacement
   of a pre-rename `DLxxxx` ID
+- Release pipeline: prebuilt binaries for Linux, macOS and Windows (amd64 and
+  arm64) with checksums, built by GoReleaser from a tag into a draft release;
+  CI builds a snapshot release on every pull request
 
 ### Changed
 - **Breaking:** rule IDs move from `DLxxxx`, which collide with hadolint's IDs for

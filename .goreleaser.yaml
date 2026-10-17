@@ -1,0 +1,63 @@
+# GoReleaser configuration for docker-lint.
+#
+# Validate locally without publishing anything:
+#   goreleaser check
+#   goreleaser release --snapshot --clean
+#
+# Releases are cut by pushing a vX.Y.Z tag; see "Releasing" in CONTRIBUTING.md.
+version: 2
+
+project_name: docker-lint
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: docker-lint
+    main: ./cmd/docker-lint
+    binary: docker-lint
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.date={{ .CommitDate }}
+    # Stamp files with the commit time so the same tag builds the same bytes.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: docker-lint
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Release notes come from CHANGELOG.md (scripts/release-notes.sh), so the
+# changelog stays the single place where changes are described.
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: devblac
+    name: docker-lint
+  # Upload everything to a draft; a maintainer reviews and publishes it.
+  draft: true
+  prerelease: auto
