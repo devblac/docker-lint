@@ -88,3 +88,26 @@ jobs:
           # No empty report is left behind for an upload step to choke on.
           test -z "$SARIF_FILE"
           test ! -e fatal.sarif
+
+      - name: Lint several Dockerfiles with a configuration
+        id: multi
+        uses: ./
+        with:
+          version: source
+          dockerfile: |
+            testdata/**/minimal.Dockerfile
+            testdata/invalid/no-from.Dockerfile
+          config: testdata/config/no-from-off.yaml
+          sarif-file: multi.sarif
+
+      - name: Check the multi-file run
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.multi.outputs.exit-code }}
+        run: |
+          set -euo pipefail
+          test "$EXIT_CODE" = 0
+          # Both files are in one report, and the disabled rule is gone.
+          grep -q '"uri": "testdata/valid/minimal.Dockerfile"' multi.sarif
+          grep -q '"uri": "testdata/invalid/no-from.Dockerfile"' multi.sarif
+          ! grep -q '"ruleId": "DKL001"' multi.sarif

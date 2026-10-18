@@ -54,8 +54,14 @@ go build -o docker-lint ./cmd/docker-lint
 ## Usage
 
 ```bash
-docker-lint [flags] [file]
+docker-lint [flags] [path ...]
 ```
+
+Each path is a Dockerfile, a directory, or a glob pattern. A directory is searched recursively for files named
+`Dockerfile`, `Containerfile`, `Dockerfile.*` or `*.Dockerfile` (skipping `.git` and `node_modules`). Patterns
+support `**` for any number of directories and are expanded by docker-lint itself, so quote them to make them
+work the same in every shell, including on Windows. A directory or pattern that matches no Dockerfile is a fatal
+error, so a CI job cannot pass without linting anything. With no path, docker-lint reads from stdin.
 
 ### Flags
 
@@ -68,6 +74,8 @@ docker-lint [flags] [file]
 | `--quiet` | `-q` | Suppress informational messages (show only warnings and errors) |
 | `--strict` | `-s` | Treat warnings as errors (exit code 1 if any warnings) |
 | `--ignore <rules>` | | Comma-separated list of rule IDs to ignore |
+| `--config <file>` | `-c` | Configuration file (default: the nearest `.docker-lint.yaml`) |
+| `--no-config` | | Do not read a configuration file |
 | `--rules` | | List all available rules with descriptions |
 
 ### Examples
@@ -75,6 +83,12 @@ docker-lint [flags] [file]
 ```bash
 # Analyze a Dockerfile
 docker-lint Dockerfile
+
+# Analyze every Dockerfile in a repository
+docker-lint .
+
+# Analyze Dockerfiles matching a pattern
+docker-lint 'services/**/Dockerfile'
 
 # Analyze from stdin
 cat Dockerfile | docker-lint
@@ -107,13 +121,48 @@ FROM ubuntu:latest
 # No USER instruction needed for this build stage
 ```
 
+### Configuration File
+
+docker-lint reads `.docker-lint.yaml` (or `.docker-lint.yml`) from the current directory, or from the nearest
+parent directory up to the repository root. Use `--config` to pick another file and `--no-config` to read none.
+
+```yaml
+# Rules that are never reported.
+ignore:
+  - DKL103
+
+# Change a rule's severity: error, warning, info, or off to disable it.
+severity:
+  DKL303: error   # fail the build when the final image runs as root
+  DKL404: off     # disable the rule
+
+# Fail on warnings too (same as --strict).
+strict: true
+
+# Hide informational findings (same as --quiet).
+quiet: false
+
+# Skip matching files when a directory or pattern is expanded. A pattern without
+# a slash matches a file or directory name anywhere, as in .gitignore.
+exclude:
+  - vendor
+  - "examples/**"
+```
+
+Command-line flags win over the file: `--strict=false` turns off `strict: true`, and `--ignore` adds to the
+ignored rules. Unknown keys and invalid severities are fatal errors, so a typo does not silently disable the
+configuration. A file named explicitly on the command line is always linted, even if it matches `exclude`.
+
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success - no errors found (warnings allowed in non-strict mode) |
 | 1 | Lint errors found, or warnings found in strict mode |
-| 2 | Fatal error - file not found, permission denied, or parse error |
+| 2 | Fatal error - invalid arguments or configuration, file not found, or parse error |
+
+When several files are linted, one that cannot be read or parsed is reported and the others are still linted;
+the exit code is then 2.
 
 ## Rules
 
@@ -182,7 +231,8 @@ Dockerfile:3:1: [info] DKL202: Found 2 consecutive RUN instructions that could b
 
 ### JSON (`--format json`)
 
-Machine-readable JSON output for CI/CD integration:
+Machine-readable JSON output for CI/CD integration. A single file (or stdin) produces one object; several files
+produce an array with one such object per file:
 
 ```json
 {
@@ -228,8 +278,8 @@ The repository's CI workflow runs `go test ./... -cover`. Coverage uploads to Co
 
 ### GitHub Actions
 
-The docker-lint action installs a release binary (checksum-verified), lints a Dockerfile and annotates the
-pull request diff with the findings:
+The docker-lint action installs a release binary (checksum-verified), lints your Dockerfiles and annotates
+the pull request diff with the findings:
 
 ```yaml
 - uses: actions/checkout@v7
@@ -250,7 +300,9 @@ steps:
   - uses: actions/checkout@v7
   - uses: devblac/docker-lint@v0.1.0
     with:
-      dockerfile: services/api/Dockerfile
+      dockerfile: |
+        Dockerfile
+        services/**/Dockerfile
       strict: true
       ignore: DKL404
       upload-sarif: true
@@ -258,7 +310,8 @@ steps:
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `dockerfile` | `Dockerfile` | Path to the Dockerfile, relative to the repository root |
+| `dockerfile` | `Dockerfile` | Files, directories or glob patterns to lint, one per line |
+| `config` | | Configuration file (default: `.docker-lint.yaml` at the repository root) |
 | `version` | `latest` | docker-lint release to install, e.g. `v0.1.0` |
 | `format` | `github` | Log output: `github` (annotations), `text`, `json` or `sarif` |
 | `strict` | `false` | Fail on warnings, not only on errors |
@@ -268,8 +321,8 @@ steps:
 | `upload-sarif` | `false` | Upload the SARIF report to GitHub code scanning |
 
 The action fails the step with docker-lint's exit code and exposes it as the `exit-code` output. A SARIF
-report is still written and uploaded when the lint fails; a Dockerfile that cannot be parsed produces no
-report rather than an empty one.
+report is still written and uploaded when the lint fails, and covers every Dockerfile that could be parsed;
+when none could, no report is written rather than an empty one.
 
 ### GitLab CI
 
