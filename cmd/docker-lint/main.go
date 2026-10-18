@@ -44,6 +44,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		versionFlg bool
 		rulesFlag  bool
 		ignoreCSV  string
+		formatFlag string
 	)
 
 	fs := flag.NewFlagSet("docker-lint", flag.ContinueOnError)
@@ -60,6 +61,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&versionFlg, "v", false, "")
 	fs.BoolVar(&rulesFlag, "rules", false, "")
 	fs.StringVar(&ignoreCSV, "ignore", "", "")
+	fs.StringVar(&formatFlag, "format", "", "")
+	fs.StringVar(&formatFlag, "f", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -79,6 +82,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if rulesFlag {
 		listRules(stdout)
 		return ExitSuccess
+	}
+
+	outputFormat, err := resolveFormat(formatFlag, jsonOutput)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return ExitFatal
 	}
 
 	positional := fs.Args()
@@ -116,18 +125,81 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	anlzr := analyzer.NewWithDefaults(analyzer.Config{IgnoreRules: ignoreRules})
 	findings := anlzr.Analyze(dockerfile)
 
-	var formatErr error
-	if jsonOutput {
-		formatErr = formatter.NewJSONFormatter(filename, quiet).Format(findings, stdout)
-	} else {
-		formatErr = formatter.NewTextFormatter(filename, quiet).Format(findings, stdout)
-	}
-	if formatErr != nil {
+	if formatErr := newFormatter(outputFormat, filename, quiet).Format(findings, stdout); formatErr != nil {
 		fmt.Fprintf(stderr, "Error: failed to format output: %v\n", formatErr)
 		return ExitFatal
 	}
 
 	return determineExitCode(findings, strict)
+}
+
+// Output formats accepted by --format.
+const (
+	formatText   = "text"
+	formatJSON   = "json"
+	formatSARIF  = "sarif"
+	formatGitHub = "github"
+)
+
+// projectURL is reported as the tool's home page in SARIF output.
+const projectURL = "https://github.com/devblac/docker-lint"
+
+// resolveFormat combines --format and its --json shorthand into one format.
+func resolveFormat(format string, jsonOutput bool) (string, error) {
+	if jsonOutput {
+		if format != "" && format != formatJSON {
+			return "", fmt.Errorf("--json conflicts with --format %s", format)
+		}
+		return formatJSON, nil
+	}
+
+	switch format {
+	case "":
+		return formatText, nil
+	case formatText, formatJSON, formatSARIF, formatGitHub:
+		return format, nil
+	default:
+		return "", fmt.Errorf("unknown output format %q (want text, json, sarif or github)", format)
+	}
+}
+
+// findingFormatter writes findings in one output format.
+type findingFormatter interface {
+	Format(findings []ast.Finding, w io.Writer) error
+}
+
+// newFormatter returns the formatter for a resolved output format.
+func newFormatter(format, filename string, quiet bool) findingFormatter {
+	switch format {
+	case formatJSON:
+		return formatter.NewJSONFormatter(filename, quiet)
+	case formatSARIF:
+		return formatter.NewSARIFFormatter(filename, quiet, toolInfo())
+	case formatGitHub:
+		return formatter.NewGitHubFormatter(filename, quiet)
+	default:
+		return formatter.NewTextFormatter(filename, quiet)
+	}
+}
+
+// toolInfo describes docker-lint and every built-in rule for SARIF output.
+func toolInfo() formatter.ToolInfo {
+	all := rules.DefaultRegistry.All()
+	infos := make([]formatter.RuleInfo, 0, len(all))
+	for _, rule := range all {
+		infos = append(infos, formatter.RuleInfo{
+			ID:          rule.ID(),
+			Name:        rule.Name(),
+			Description: rule.Description(),
+			Severity:    rule.Severity(),
+		})
+	}
+	return formatter.ToolInfo{
+		Name:           "docker-lint",
+		Version:        version,
+		InformationURI: projectURL,
+		Rules:          infos,
+	}
 }
 
 // determineExitCode returns ExitLintErrors if any errors exist, or if warnings
@@ -189,7 +261,8 @@ Reads from stdin when no file is given.
 Flags:
   -h, --help            Show this help message
   -v, --version         Show version information
-  -j, --json            Output findings as JSON
+  -f, --format <fmt>    Output format: text (default), json, sarif, github
+  -j, --json            Shorthand for --format json
   -q, --quiet           Suppress informational messages (show only warnings and errors)
   -s, --strict          Treat warnings as errors
       --ignore <rules>  Comma-separated list of rule IDs to ignore
