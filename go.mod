@@ -5,6 +5,7 @@ go 1.22.0
 require (
 	github.com/leanovate/gopter v0.2.11
 	github.com/moby/buildkit v0.20.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

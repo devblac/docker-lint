@@ -120,6 +120,12 @@ type sarifRegion struct {
 
 // Format writes the findings to w as a SARIF log with a single run.
 func (f *SARIFFormatter) Format(findings []ast.Finding, w io.Writer) error {
+	return f.FormatReports([]Report{{Filename: f.Filename, Findings: findings}}, w)
+}
+
+// FormatReports writes the findings of several files as one SARIF run, the
+// shape code scanning expects for a single analysis of a repository.
+func (f *SARIFFormatter) FormatReports(reports []Report, w io.Writer) error {
 	rules := make([]sarifRule, 0, len(f.Tool.Rules))
 	ruleIndex := make(map[string]int, len(f.Tool.Rules))
 	for i, rule := range f.Tool.Rules {
@@ -135,9 +141,34 @@ func (f *SARIFFormatter) Format(findings []ast.Finding, w io.Writer) error {
 		})
 	}
 
-	uri := artifactURI(f.Filename)
-	results := make([]sarifResult, 0, len(findings))
-	for _, finding := range findings {
+	results := make([]sarifResult, 0)
+	for _, report := range reports {
+		results = f.appendResults(results, report, ruleIndex)
+	}
+
+	log := sarifLog{
+		Schema:  sarifSchema,
+		Version: sarifVersion,
+		Runs: []sarifRun{{
+			Tool: sarifTool{Driver: sarifDriver{
+				Name:           f.Tool.Name,
+				Version:        f.Tool.Version,
+				InformationURI: f.Tool.InformationURI,
+				Rules:          rules,
+			}},
+			Results: results,
+		}},
+	}
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(log)
+}
+
+// appendResults converts the findings of one file into SARIF results.
+func (f *SARIFFormatter) appendResults(results []sarifResult, report Report, ruleIndex map[string]int) []sarifResult {
+	uri := artifactURI(report.Filename)
+	for _, finding := range report.Findings {
 		if f.Quiet && finding.Severity == ast.SeverityInfo {
 			continue
 		}
@@ -163,24 +194,7 @@ func (f *SARIFFormatter) Format(findings []ast.Finding, w io.Writer) error {
 		}
 		results = append(results, result)
 	}
-
-	log := sarifLog{
-		Schema:  sarifSchema,
-		Version: sarifVersion,
-		Runs: []sarifRun{{
-			Tool: sarifTool{Driver: sarifDriver{
-				Name:           f.Tool.Name,
-				Version:        f.Tool.Version,
-				InformationURI: f.Tool.InformationURI,
-				Rules:          rules,
-			}},
-			Results: results,
-		}},
-	}
-
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(log)
+	return results
 }
 
 // sarifLevel maps a severity to a SARIF result level.

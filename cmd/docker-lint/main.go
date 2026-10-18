@@ -11,6 +11,8 @@ import (
 
 	"github.com/devblac/docker-lint/internal/analyzer"
 	"github.com/devblac/docker-lint/internal/ast"
+	"github.com/devblac/docker-lint/internal/config"
+	"github.com/devblac/docker-lint/internal/files"
 	"github.com/devblac/docker-lint/internal/formatter"
 	"github.com/devblac/docker-lint/internal/parser"
 	"github.com/devblac/docker-lint/internal/rules"
@@ -43,8 +45,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		strict     bool
 		versionFlg bool
 		rulesFlag  bool
+		noConfig   bool
 		ignoreCSV  string
 		formatFlag string
+		configPath string
 	)
 
 	fs := flag.NewFlagSet("docker-lint", flag.ContinueOnError)
@@ -60,9 +64,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&versionFlg, "version", false, "")
 	fs.BoolVar(&versionFlg, "v", false, "")
 	fs.BoolVar(&rulesFlag, "rules", false, "")
+	fs.BoolVar(&noConfig, "no-config", false, "")
 	fs.StringVar(&ignoreCSV, "ignore", "", "")
 	fs.StringVar(&formatFlag, "format", "", "")
 	fs.StringVar(&formatFlag, "f", "", "")
+	fs.StringVar(&configPath, "config", "", "")
+	fs.StringVar(&configPath, "c", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -90,47 +97,134 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return ExitFatal
 	}
 
-	positional := fs.Args()
-	if len(positional) > 1 {
-		fmt.Fprintln(stderr, "Error: too many arguments: only one Dockerfile path is supported")
+	if noConfig && configPath != "" {
+		fmt.Fprintln(stderr, "Error: --config conflicts with --no-config")
 		return ExitFatal
 	}
-
-	filename := "stdin"
-	reader := stdin
-	if reader == nil {
-		reader = os.Stdin
-	}
-
-	if len(positional) == 1 {
-		filename = positional[0]
-		file, err := os.Open(filename)
-		if err != nil {
-			fmt.Fprintf(stderr, "Error: failed to open file: %v\n", err)
-			return ExitFatal
-		}
-		defer file.Close()
-		reader = file
-	}
-
-	dockerfile, err := parser.ParseReader(reader)
+	cfg, cfgPath, err := loadConfig(configPath, noConfig)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: failed to parse Dockerfile: %v\n", err)
+		fmt.Fprintf(stderr, "Error: invalid configuration: %v\n", err)
 		return ExitFatal
 	}
 
-	ignoreRules := parseIgnoreList(ignoreCSV)
-	warnUnknownRules(ignoreRules, stderr)
+	// Flags given on the command line win over the configuration file.
+	explicit := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	if !explicit["strict"] && !explicit["s"] && cfg.Strict != nil {
+		strict = *cfg.Strict
+	}
+	if !explicit["quiet"] && !explicit["q"] && cfg.Quiet != nil {
+		quiet = *cfg.Quiet
+	}
 
-	anlzr := analyzer.NewWithDefaults(analyzer.Config{IgnoreRules: ignoreRules})
-	findings := anlzr.Analyze(dockerfile)
+	cliIgnores := parseIgnoreList(ignoreCSV)
+	warnUnknownRules(cliIgnores, "--ignore", stderr)
+	if cfgPath != "" {
+		warnUnknownRules(cfg.RuleIDs(), cfgPath, stderr)
+	}
 
-	if formatErr := newFormatter(outputFormat, filename, quiet).Format(findings, stdout); formatErr != nil {
+	var ignoreRules []string
+	ignoreRules = append(ignoreRules, cfg.Ignore...)
+	ignoreRules = append(ignoreRules, cfg.DisabledRules()...)
+	ignoreRules = append(ignoreRules, cliIgnores...)
+
+	anlzr := analyzer.NewWithDefaults(analyzer.Config{
+		IgnoreRules:       ignoreRules,
+		SeverityOverrides: cfg.SeverityOverrides(),
+	})
+
+	reports, single, fatal := lintInputs(fs.Args(), cfg.Exclude, stdin, anlzr, stderr)
+
+	out := output{format: outputFormat, quiet: quiet, tool: toolInfo(cfg)}
+	if formatErr := out.write(reports, single, stdout); formatErr != nil {
 		fmt.Fprintf(stderr, "Error: failed to format output: %v\n", formatErr)
 		return ExitFatal
 	}
 
-	return determineExitCode(findings, strict)
+	if fatal {
+		return ExitFatal
+	}
+	var all []ast.Finding
+	for _, r := range reports {
+		all = append(all, r.Findings...)
+	}
+	return determineExitCode(all, strict)
+}
+
+// loadConfig returns the configuration to use: the file named by --config,
+// none with --no-config, or else the nearest .docker-lint.yaml. It also
+// returns the path the configuration came from, "" when there is none.
+func loadConfig(path string, disabled bool) (*config.Config, string, error) {
+	if disabled {
+		return &config.Config{}, "", nil
+	}
+	if path == "" {
+		found, err := config.Find(".")
+		if err != nil || found == "" {
+			return &config.Config{}, "", err
+		}
+		path = found
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return nil, "", err
+	}
+	return cfg, path, nil
+}
+
+// lintInputs lints stdin when no path is given, or else every Dockerfile the
+// paths expand to. A file that cannot be read or parsed is reported on stderr
+// and skipped, and fatal is set; the other files are still linted. single is
+// true when the input is stdin or one file named directly.
+func lintInputs(paths, exclude []string, stdin io.Reader, anlzr *analyzer.Analyzer, stderr io.Writer) (reports []formatter.Report, single, fatal bool) {
+	if len(paths) == 0 {
+		if stdin == nil {
+			stdin = os.Stdin
+		}
+		dockerfile, err := parser.ParseReader(stdin)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: failed to parse Dockerfile: %v\n", err)
+			return nil, true, true
+		}
+		return []formatter.Report{{Filename: "stdin", Findings: anlzr.Analyze(dockerfile)}}, true, false
+	}
+
+	expanded, err := files.Expand(paths, exclude)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return nil, false, true
+	}
+	single = len(paths) == 1 && len(expanded) == 1 && expanded[0] == paths[0]
+
+	reports = make([]formatter.Report, 0, len(expanded))
+	for _, path := range expanded {
+		dockerfile, err := parseFile(path)
+		if err != nil {
+			if single {
+				fmt.Fprintf(stderr, "Error: %v\n", err)
+			} else {
+				fmt.Fprintf(stderr, "Error: %s: %v\n", path, err)
+			}
+			fatal = true
+			continue
+		}
+		reports = append(reports, formatter.Report{Filename: path, Findings: anlzr.Analyze(dockerfile)})
+	}
+	return reports, single, fatal
+}
+
+func parseFile(path string) (*ast.Dockerfile, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	dockerfile, err := parser.ParseReader(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Dockerfile: %w", err)
+	}
+	return dockerfile, nil
 }
 
 // Output formats accepted by --format.
@@ -163,35 +257,63 @@ func resolveFormat(format string, jsonOutput bool) (string, error) {
 	}
 }
 
-// findingFormatter writes findings in one output format.
-type findingFormatter interface {
+// reportFormatter writes findings in one output format, for a single file
+// (Format) or for several (FormatReports).
+type reportFormatter interface {
 	Format(findings []ast.Finding, w io.Writer) error
+	FormatReports(reports []formatter.Report, w io.Writer) error
 }
 
-// newFormatter returns the formatter for a resolved output format.
-func newFormatter(format, filename string, quiet bool) findingFormatter {
-	switch format {
-	case formatJSON:
-		return formatter.NewJSONFormatter(filename, quiet)
-	case formatSARIF:
-		return formatter.NewSARIFFormatter(filename, quiet, toolInfo())
-	case formatGitHub:
-		return formatter.NewGitHubFormatter(filename, quiet)
+// output writes the lint reports in the chosen format.
+type output struct {
+	format string
+	quiet  bool
+	tool   formatter.ToolInfo
+}
+
+// write writes the reports. A single input keeps the single-file output shape
+// (a JSON object rather than an array); nothing is written when no file could
+// be linted, so a fatal error leaves stdout empty.
+func (o output) write(reports []formatter.Report, single bool, w io.Writer) error {
+	switch {
+	case len(reports) == 0:
+		return nil
+	case single:
+		return o.formatter(reports[0].Filename).Format(reports[0].Findings, w)
 	default:
-		return formatter.NewTextFormatter(filename, quiet)
+		return o.formatter("").FormatReports(reports, w)
 	}
 }
 
-// toolInfo describes docker-lint and every built-in rule for SARIF output.
-func toolInfo() formatter.ToolInfo {
+func (o output) formatter(filename string) reportFormatter {
+	switch o.format {
+	case formatJSON:
+		return formatter.NewJSONFormatter(filename, o.quiet)
+	case formatSARIF:
+		return formatter.NewSARIFFormatter(filename, o.quiet, o.tool)
+	case formatGitHub:
+		return formatter.NewGitHubFormatter(filename, o.quiet)
+	default:
+		return formatter.NewTextFormatter(filename, o.quiet)
+	}
+}
+
+// toolInfo describes docker-lint and every built-in rule for SARIF output,
+// with default severities as changed by the configuration.
+func toolInfo(cfg *config.Config) formatter.ToolInfo {
+	overrides := cfg.SeverityOverrides()
 	all := rules.DefaultRegistry.All()
 	infos := make([]formatter.RuleInfo, 0, len(all))
 	for _, rule := range all {
+		severity := rule.Severity()
+		if s, ok := overrides[rule.ID()]; ok {
+			severity = s
+		}
 		infos = append(infos, formatter.RuleInfo{
 			ID:          rule.ID(),
 			Name:        rule.Name(),
 			Description: rule.Description(),
-			Severity:    rule.Severity(),
+			Severity:    severity,
 		})
 	}
 	return formatter.ToolInfo{
@@ -234,19 +356,19 @@ func parseIgnoreList(csv string) []string {
 	return result
 }
 
-// warnUnknownRules reports --ignore entries that match no rule, which would
-// otherwise silently ignore nothing. IDs from before the DKL rename get their
-// replacement named.
-func warnUnknownRules(ids []string, stderr io.Writer) {
+// warnUnknownRules reports rule IDs from --ignore or the configuration file
+// (source) that match no rule, which would otherwise silently do nothing. IDs
+// from before the DKL rename get their replacement named.
+func warnUnknownRules(ids []string, source string, stderr io.Writer) {
 	for _, id := range ids {
 		if rules.DefaultRegistry.Get(id) != nil {
 			continue
 		}
 		if replacement, ok := rules.LegacyRuleIDs[id]; ok {
-			fmt.Fprintf(stderr, "Warning: rule %s was renamed to %s; --ignore %s has no effect\n", id, replacement, id)
+			fmt.Fprintf(stderr, "Warning: rule %s was renamed to %s; %s in %s has no effect\n", id, replacement, id, source)
 			continue
 		}
-		fmt.Fprintf(stderr, "Warning: unknown rule %s in --ignore; run --rules to list available rules\n", id)
+		fmt.Fprintf(stderr, "Warning: unknown rule %s in %s; run --rules to list available rules\n", id, source)
 	}
 }
 
@@ -254,9 +376,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `docker-lint - static analyzer for Dockerfiles
 
 Usage:
-  docker-lint [flags] [file]
+  docker-lint [flags] [path ...]
 
-Reads from stdin when no file is given.
+Each path is a Dockerfile, a directory searched recursively for Dockerfiles,
+or a glob pattern such as "services/**/Dockerfile". Reads from stdin when no
+path is given.
 
 Flags:
   -h, --help            Show this help message
@@ -266,12 +390,14 @@ Flags:
   -q, --quiet           Suppress informational messages (show only warnings and errors)
   -s, --strict          Treat warnings as errors
       --ignore <rules>  Comma-separated list of rule IDs to ignore
+  -c, --config <file>   Configuration file (default: nearest .docker-lint.yaml)
+      --no-config       Do not read a configuration file
       --rules           List all available rules with descriptions
 
 Exit Codes:
   0  No errors found (warnings allowed in non-strict mode)
   1  Lint errors found, or warnings found in strict mode
-  2  Fatal error (invalid arguments, file not found, parse error)
+  2  Fatal error (invalid arguments or configuration, file not found, parse error)
 `)
 }
 

@@ -1,0 +1,4 @@
+# Used by the action workflow: turns the DKL001 error off, so linting
+# testdata/invalid/no-from.Dockerfile succeeds.
+severity:
+  DKL001: "off"

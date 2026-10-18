@@ -12,6 +12,8 @@ import (
 type Config struct {
 	// IgnoreRules is a list of rule IDs to skip during analysis.
 	IgnoreRules []string
+	// SeverityOverrides replaces the severity of a rule's findings.
+	SeverityOverrides map[string]ast.Severity
 }
 
 // Analyzer orchestrates the execution of lint rules against a Dockerfile AST.
@@ -62,6 +64,9 @@ func (a *Analyzer) Analyze(dockerfile *ast.Dockerfile) []ast.Finding {
 		for _, finding := range findings {
 			if a.isIgnoredByInlineComment(dockerfile, finding) {
 				continue
+			}
+			if severity, ok := a.config.SeverityOverrides[finding.RuleID]; ok {
+				finding.Severity = severity
 			}
 			allFindings = append(allFindings, finding)
 		}
@@ -141,6 +146,9 @@ func (a *Analyzer) AnalyzeWithRules(dockerfile *ast.Dockerfile, ruleIDs []string
 		for _, finding := range findings {
 			if a.isIgnoredByInlineComment(dockerfile, finding) {
 				continue
+			}
+			if severity, ok := a.config.SeverityOverrides[finding.RuleID]; ok {
+				finding.Severity = severity
 			}
 			allFindings = append(allFindings, finding)
 		}
