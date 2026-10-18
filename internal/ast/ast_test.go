@@ -23,7 +23,7 @@ func TestSeverityString(t *testing.T) {
 
 func TestFindingCreation(t *testing.T) {
 	finding := Finding{
-		RuleID:     "DL3006",
+		RuleID:     "DKL101",
 		Severity:   SeverityWarning,
 		Line:       10,
 		Column:     1,
@@ -31,8 +31,8 @@ func TestFindingCreation(t *testing.T) {
 		Suggestion: "Use 'FROM alpine:3.18' instead of 'FROM alpine'",
 	}
 
-	if finding.RuleID != "DL3006" {
-		t.Errorf("Finding.RuleID = %q, want %q", finding.RuleID, "DL3006")
+	if finding.RuleID != "DKL101" {
+		t.Errorf("Finding.RuleID = %q, want %q", finding.RuleID, "DKL101")
 	}
 	if finding.Severity != SeverityWarning {
 		t.Errorf("Finding.Severity = %v, want %v", finding.Severity, SeverityWarning)

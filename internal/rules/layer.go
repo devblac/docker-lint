@@ -2,6 +2,7 @@
 package rules
 
 import (
+	"path"
 	"regexp"
 	"strings"
 
@@ -12,8 +13,10 @@ import (
 var (
 	// aptGetPattern matches apt-get install commands
 	aptGetInstallPattern = regexp.MustCompile(`apt-get\s+(install|upgrade)`)
-	// aptGetCleanPattern matches apt-get clean or rm -rf /var/lib/apt/lists
-	aptGetCleanPattern = regexp.MustCompile(`(apt-get\s+clean|rm\s+-rf?\s+/var/lib/apt/lists)`)
+	// aptGetCleanPattern matches the ways apt's package lists get removed:
+	// apt-get clean, apt dist-clean (apt >= 2.7, used by Debian trixie images)
+	// and rm -rf /var/lib/apt/lists in any flag order.
+	aptGetCleanPattern = regexp.MustCompile(`(apt(-get)?\s+(dist-)?clean|rm\s+-[a-zA-Z]+\s+/var/lib/apt/lists)`)
 
 	// yumInstallPattern matches yum/dnf install commands
 	yumInstallPattern = regexp.MustCompile(`(yum|dnf)\s+install`)
@@ -35,7 +38,7 @@ var (
 	yumUpdatePattern    = regexp.MustCompile(`(yum|dnf)\s+(update|upgrade)`)
 )
 
-// CacheNotCleanedRule checks for package manager installs without cache cleanup (DL3009).
+// CacheNotCleanedRule checks for package manager installs without cache cleanup (DKL201).
 type CacheNotCleanedRule struct{}
 
 func (r *CacheNotCleanedRule) ID() string             { return RuleCacheNotCleaned }
@@ -57,21 +60,26 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 
 		cmd := run.Command
 
+		// A cache mount keeps the package manager's cache out of the layer
+		// entirely, which is better than cleaning it afterwards.
+
 		// Check apt-get install without cleanup
-		if aptGetInstallPattern.MatchString(cmd) && !aptGetCleanPattern.MatchString(cmd) {
+		if aptGetInstallPattern.MatchString(cmd) && !aptGetCleanPattern.MatchString(cmd) &&
+			!hasCacheMountFor(run, "/var/lib/apt/lists") {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
 				Line:       run.Line(),
 				Column:     1,
 				Message:    "apt-get install without cache cleanup increases image size",
-				Suggestion: "Add 'apt-get clean && rm -rf /var/lib/apt/lists/*' in the same RUN instruction",
+				Suggestion: "Add 'rm -rf /var/lib/apt/lists/*' (or 'apt-get dist-clean') in the same RUN instruction, or use '--mount=type=cache,target=/var/lib/apt'",
 			})
 			continue
 		}
 
 		// Check yum/dnf install without cleanup
-		if yumInstallPattern.MatchString(cmd) && !yumCleanPattern.MatchString(cmd) {
+		if yumInstallPattern.MatchString(cmd) && !yumCleanPattern.MatchString(cmd) &&
+			!hasCacheMountFor(run, "/var/cache/yum", "/var/cache/dnf") {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -84,7 +92,8 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		}
 
 		// Check apk add without --no-cache
-		if apkAddPattern.MatchString(cmd) && !apkNoCachePattern.MatchString(cmd) {
+		if apkAddPattern.MatchString(cmd) && !apkNoCachePattern.MatchString(cmd) &&
+			!hasCacheMountFor(run, "/var/cache/apk", "/etc/apk/cache") {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -97,7 +106,7 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		}
 
 		// Check pip install without --no-cache-dir
-		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) {
+		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) && !hasPipCacheMount(run) {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -112,12 +121,43 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// ConsecutiveRunRule checks for consecutive RUN instructions that could be combined (DL3010).
+// hasCacheMountFor reports whether the RUN mounts a build cache over any of
+// the given paths, directly or through a parent directory.
+func hasCacheMountFor(run *ast.RunInstruction, paths ...string) bool {
+	for _, target := range run.CacheMounts {
+		target = strings.TrimRight(target, "/")
+		for _, p := range paths {
+			if target == p || strings.HasPrefix(p, target+"/") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasPipCacheMount reports whether the RUN mounts a build cache over pip's
+// cache, which lives in ~/.cache/pip for whichever user runs pip.
+func hasPipCacheMount(run *ast.RunInstruction) bool {
+	for _, target := range run.CacheMounts {
+		target = strings.TrimRight(target, "/")
+		if strings.HasSuffix(target, "/.cache/pip") || strings.HasSuffix(target, "/.cache") {
+			return true
+		}
+	}
+	return false
+}
+
+// ConsecutiveRunRule checks for consecutive RUN instructions that could be combined (DKL202).
+//
+// It is informational: with BuildKit, separate RUN steps are often deliberate,
+// trading a few layers for clearer, independently cached build steps. The
+// regression corpus showed it firing on three files out of four, including
+// Docker's own official images.
 type ConsecutiveRunRule struct{}
 
 func (r *ConsecutiveRunRule) ID() string             { return RuleConsecutiveRun }
 func (r *ConsecutiveRunRule) Name() string           { return "Consecutive RUN instructions" }
-func (r *ConsecutiveRunRule) Severity() ast.Severity { return ast.SeverityWarning }
+func (r *ConsecutiveRunRule) Severity() ast.Severity { return ast.SeverityInfo }
 
 func (r *ConsecutiveRunRule) Description() string {
 	return "Combine consecutive RUN instructions to reduce the number of layers"
@@ -185,7 +225,7 @@ func intToString(n int) string {
 	return digits
 }
 
-// SuboptimalOrderingRule checks for COPY/ADD before RUN that doesn't depend on copied files (DL3011).
+// SuboptimalOrderingRule checks for COPY/ADD before RUN that doesn't depend on copied files (DKL203).
 type SuboptimalOrderingRule struct{}
 
 func (r *SuboptimalOrderingRule) ID() string             { return RuleSuboptimalOrdering }
@@ -210,10 +250,10 @@ func (r *SuboptimalOrderingRule) Check(dockerfile *ast.Dockerfile) []ast.Finding
 func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 	var findings []ast.Finding
 
-	// Track COPY/ADD instructions and their destinations
+	// Track COPY/ADD instructions and their sources
 	type copyInfo struct {
-		instr ast.Instruction
-		dest  string
+		instr   ast.Instruction
+		sources []string
 	}
 	var copies []copyInfo
 
@@ -225,10 +265,10 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 			if v.From != "" {
 				continue
 			}
-			copies = append(copies, copyInfo{instr: v, dest: v.Dest})
+			copies = append(copies, copyInfo{instr: v, sources: v.Sources})
 
 		case *ast.AddInstruction:
-			copies = append(copies, copyInfo{instr: v, dest: v.Dest})
+			copies = append(copies, copyInfo{instr: v, sources: v.Sources})
 
 		case *ast.RunInstruction:
 			// Check if this RUN is a package install that likely doesn't depend on copied files
@@ -247,8 +287,14 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 				// the early copies might be suboptimal
 				if hasMoreCopies {
 					for _, cp := range copies {
-						// Skip if copying package files (requirements.txt, package.json, etc.)
-						if isPackageFile(cp.dest) {
+						// Copying only dependency manifests before the install
+						// step is the recommended caching pattern.
+						if isDependencyManifestCopy(cp.sources) {
+							continue
+						}
+						// The RUN uses what this COPY brought in (a script, a
+						// config file), so the COPY has to stay before it.
+						if runReferencesCopy(v.Command, cp.sources) {
 							continue
 						}
 						findings = append(findings, ast.Finding{
@@ -268,6 +314,22 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 	return findings
 }
 
+// runReferencesCopy reports whether a command mentions a file brought in by a
+// COPY/ADD, which means the RUN depends on it. Only distinctive names count:
+// short names such as "." or "src" would match almost any command.
+func runReferencesCopy(command string, sources []string) bool {
+	for _, source := range sources {
+		name := path.Base(strings.TrimRight(source, "/"))
+		if len(name) < 4 || strings.ContainsAny(name, "*?[") {
+			continue
+		}
+		if strings.Contains(command, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // isPackageInstallCommand checks if a command is a package manager install
 func isPackageInstallCommand(cmd string) bool {
 	return aptGetInstallPattern.MatchString(cmd) ||
@@ -279,35 +341,91 @@ func isPackageInstallCommand(cmd string) bool {
 		strings.Contains(cmd, "go mod download")
 }
 
-// isPackageFile checks if the destination is a package dependency file
-func isPackageFile(dest string) bool {
-	packageFiles := []string{
-		"requirements.txt",
-		"package.json",
-		"package-lock.json",
-		"yarn.lock",
-		"go.mod",
-		"go.sum",
-		"Gemfile",
-		"Gemfile.lock",
-		"Cargo.toml",
-		"Cargo.lock",
-		"pom.xml",
-		"build.gradle",
-		"composer.json",
-		"composer.lock",
+// packageFiles are dependency manifests and lock files, lower-cased.
+var packageFiles = []string{
+	// Python
+	"requirements.txt", "pyproject.toml", "poetry.lock", "pipfile", "pipfile.lock",
+	"setup.py", "setup.cfg", "uv.lock",
+	// JavaScript
+	"package.json", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
+	"pnpm-lock.yaml", ".npmrc", ".yarnrc.yml",
+	// Go
+	"go.mod", "go.sum", "go.work", "go.work.sum",
+	// Ruby, Rust, PHP, Elixir
+	"gemfile", "gemfile.lock", "cargo.toml", "cargo.lock",
+	"composer.json", "composer.lock", "mix.exs", "mix.lock",
+	// JVM
+	"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle",
+	"settings.gradle.kts", "gradle.properties",
+	// .NET
+	"packages.config", "nuget.config",
+}
+
+// packageFileSuffixes are extensions of dependency manifests named per project.
+var packageFileSuffixes = []string{".csproj", ".fsproj", ".vbproj", ".sln"}
+
+// wildcardManifestCandidates are the names a wildcard source is matched
+// against: every known manifest plus examples of the per-project ones.
+var wildcardManifestCandidates = append(
+	append([]string{}, packageFiles...),
+	"requirements-dev.txt", "app.csproj", "app.fsproj", "app.sln",
+)
+
+// nonManifestProbes are ordinary source files and directories. A wildcard
+// source that matches any of them ("*", "*.go") copies more than manifests.
+var nonManifestProbes = []string{"main.go", "index.js", "app.py", "readme.md", "dockerfile", "src"}
+
+// isDependencyManifestCopy reports whether every source of a COPY/ADD is a
+// dependency manifest, as in "COPY go.mod go.sum ./".
+func isDependencyManifestCopy(sources []string) bool {
+	if len(sources) == 0 {
+		return false
 	}
-	dest = strings.ToLower(dest)
+	for _, source := range sources {
+		if !isPackageFile(source) {
+			return false
+		}
+	}
+	return true
+}
+
+// isPackageFile reports whether a path names a dependency manifest or lock
+// file. Wildcard patterns count when they select manifests only, as
+// "package*.json" or "*.csproj" do.
+func isPackageFile(p string) bool {
+	base := strings.ToLower(path.Base(strings.TrimRight(p, "/")))
+
+	if strings.ContainsAny(base, "*?[") {
+		for _, probe := range nonManifestProbes {
+			if ok, _ := path.Match(base, probe); ok {
+				return false
+			}
+		}
+		for _, candidate := range wildcardManifestCandidates {
+			if ok, _ := path.Match(base, candidate); ok {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, pf := range packageFiles {
-		pfLower := strings.ToLower(pf)
-		if strings.HasSuffix(dest, pfLower) || strings.Contains(dest, pfLower) {
+		if base == pf {
 			return true
 		}
 	}
-	return false
+	for _, suffix := range packageFileSuffixes {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+
+	// requirements-dev.txt, requirements.prod.txt and the like
+	ok, _ := path.Match("requirements*.txt", base)
+	return ok
 }
 
-// UpdateWithoutInstallRule checks for package update without install in same command (DL3012).
+// UpdateWithoutInstallRule checks for package update without install in same command (DKL204).
 type UpdateWithoutInstallRule struct{}
 
 func (r *UpdateWithoutInstallRule) ID() string             { return RuleUpdateWithoutInstall }

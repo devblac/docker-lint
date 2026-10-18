@@ -103,10 +103,11 @@ func (f *FromInstruction) Type() InstructionType { return InstrFROM }
 
 // RunInstruction represents a RUN instruction.
 type RunInstruction struct {
-	LineNum int
-	RawText string
-	Command string
-	Shell   bool // shell form vs exec form
+	LineNum     int
+	RawText     string
+	Command     string
+	Shell       bool     // shell form vs exec form
+	CacheMounts []string // targets of --mount=type=cache, kept out of the layer
 }
 
 func (r *RunInstruction) Line() int             { return r.LineNum }

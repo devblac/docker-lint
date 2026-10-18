@@ -1,0 +1,5 @@
+54:1 info DKL202 Found 3 consecutive RUN instructions that could be combined
+289:1 info DKL405 COPY uses wildcard pattern which may include unnecessary files
+292:1 info DKL202 Found 2 consecutive RUN instructions that could be combined
+305:1 warning DKL303 No USER instruction in the final stage; container will run as root
+305:1 info DKL404 No HEALTHCHECK instruction found

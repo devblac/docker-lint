@@ -26,7 +26,7 @@ func TestLatestTagDetectionCompleteness(t *testing.T) {
 	missingTagRule := &MissingTagRule{}
 	latestTagRule := &LatestTagRule{}
 
-	// Property: FROM with no tag triggers exactly one warning (DL3006)
+	// Property: FROM with no tag triggers exactly one warning (DKL101)
 	properties.Property("FROM with no tag triggers exactly one missing tag warning", prop.ForAll(
 		func(image string) bool {
 			dockerfile := &ast.Dockerfile{
@@ -46,7 +46,7 @@ func TestLatestTagDetectionCompleteness(t *testing.T) {
 				return false
 			}
 
-			// Finding should be DL3006
+			// Finding should be DKL101
 			if findings[0].RuleID != RuleMissingTag {
 				return false
 			}
@@ -61,7 +61,7 @@ func TestLatestTagDetectionCompleteness(t *testing.T) {
 		genNonScratchImageName(),
 	))
 
-	// Property: FROM with explicit "latest" tag triggers exactly one warning (DL3007)
+	// Property: FROM with explicit "latest" tag triggers exactly one warning (DKL102)
 	properties.Property("FROM with explicit latest tag triggers exactly one latest tag warning", prop.ForAll(
 		func(image string, latestVariant string) bool {
 			dockerfile := &ast.Dockerfile{
@@ -81,7 +81,7 @@ func TestLatestTagDetectionCompleteness(t *testing.T) {
 				return false
 			}
 
-			// Finding should be DL3007
+			// Finding should be DKL102
 			if findings[0].RuleID != RuleLatestTag {
 				return false
 			}

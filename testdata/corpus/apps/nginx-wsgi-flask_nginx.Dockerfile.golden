@@ -1,0 +1,3 @@
+4:1 warning DKL201 apk add without --no-cache increases image size
+14:1 info DKL202 Found 2 consecutive RUN instructions that could be combined
+32:1 info DKL404 No HEALTHCHECK instruction found

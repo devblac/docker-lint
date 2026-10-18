@@ -495,11 +495,11 @@ func genDockerfileWithIssues() gopter.Gen {
 			// Ensure first instruction is FROM (potentially with issues)
 			if len(instructions) > 0 {
 				if _, ok := instructions[0].(*ast.FromInstruction); !ok {
-					// Use FROM without tag to trigger DL3006
+					// Use FROM without tag to trigger DKL101
 					instructions[0] = &ast.FromInstruction{
 						LineNum: 1,
 						Image:   "ubuntu",
-						Tag:     "", // Missing tag triggers DL3006
+						Tag:     "", // Missing tag triggers DKL101
 					}
 				}
 			}
@@ -550,13 +550,13 @@ func genFromWithIssues() gopter.Gen {
 	return gen.IntRange(0, 3).Map(func(choice int) ast.Instruction {
 		switch choice {
 		case 0:
-			// Missing tag (DL3006)
+			// Missing tag (DKL101)
 			return &ast.FromInstruction{LineNum: 1, Image: "ubuntu", Tag: ""}
 		case 1:
-			// Latest tag (DL3007)
+			// Latest tag (DKL102)
 			return &ast.FromInstruction{LineNum: 1, Image: "alpine", Tag: "latest"}
 		case 2:
-			// Large base image (DL3008)
+			// Large base image (DKL103)
 			return &ast.FromInstruction{LineNum: 1, Image: "ubuntu", Tag: "22.04"}
 		default:
 			return &ast.FromInstruction{LineNum: 1, Image: "debian", Tag: "bullseye"}
@@ -567,9 +567,9 @@ func genFromWithIssues() gopter.Gen {
 // genRunWithIssues generates RUN instructions that trigger rules.
 func genRunWithIssues() gopter.Gen {
 	commands := []string{
-		// Cache not cleaned (DL3009)
+		// Cache not cleaned (DKL201)
 		"apt-get install -y curl",
-		// Update without install (DL3012)
+		// Update without install (DKL204)
 		"apt-get update",
 		// Simple command (may trigger consecutive RUN if multiple)
 		"echo hello",
@@ -586,7 +586,7 @@ func genRunWithIssues() gopter.Gen {
 // genEnvWithSecrets generates ENV instructions with secret-like keys.
 func genEnvWithSecrets() gopter.Gen {
 	pairs := [][]string{
-		// Secret patterns (DL4000)
+		// Secret patterns (DKL301)
 		{"PASSWORD", "secret123"},
 		{"API_KEY", "abc123"},
 		{"SECRET_TOKEN", "xyz789"},
@@ -606,7 +606,7 @@ func genEnvWithSecrets() gopter.Gen {
 // genArgWithSecrets generates ARG instructions with secret-like names.
 func genArgWithSecrets() gopter.Gen {
 	pairs := [][]string{
-		// Secret patterns (DL4001)
+		// Secret patterns (DKL302)
 		{"PASSWORD", "default_pass"},
 		{"API_KEY", ""},
 		{"SECRET", "mysecret"},
@@ -625,7 +625,7 @@ func genArgWithSecrets() gopter.Gen {
 // genWorkdirRelative generates WORKDIR with relative paths.
 func genWorkdirRelative() gopter.Gen {
 	paths := []string{
-		// Relative paths (DL3003)
+		// Relative paths (DKL403)
 		"app",
 		"src/app",
 		"./build",
@@ -644,9 +644,9 @@ func genWorkdirRelative() gopter.Gen {
 // genAddWithIssues generates ADD instructions that trigger rules.
 func genAddWithIssues() gopter.Gen {
 	pairs := [][]string{
-		// ADD with URL (DL4003)
+		// ADD with URL (DKL304)
 		{"https://example.com/file.tar.gz", "/app/"},
-		// ADD where COPY would suffice (DL4004)
+		// ADD where COPY would suffice (DKL305)
 		{"package.json", "/app/"},
 		{"src/", "/app/src/"},
 	}
@@ -662,7 +662,7 @@ func genAddWithIssues() gopter.Gen {
 // genCopyWithWildcard generates COPY instructions with wildcards.
 func genCopyWithWildcard() gopter.Gen {
 	pairs := [][]string{
-		// Wildcard patterns (DL5001)
+		// Wildcard patterns (DKL405)
 		{"*.go", "/app/"},
 		{"src/*", "/app/src/"},
 		// Normal COPY
@@ -854,70 +854,57 @@ func genLineIgnorePair() gopter.Gen {
 	}, reflect.TypeOf(lineIgnorePair{}))
 }
 
-// **Feature: docker-lint, Property 8: Multi-stage Stage Isolation**
+// **Feature: docker-lint, Property 8: Final-stage USER evaluation**
 // **Validates: Requirements 1.3**
 //
-// Property: For any multi-stage Dockerfile, rules that apply to stage-specific context
-// (like missing USER) SHALL be evaluated per-stage, not globally.
-// Specifically: if one stage has a USER instruction and another doesn't, we should get
-// a finding only for the stage without USER, not for the entire Dockerfile.
-func TestMultiStageStageIsolation(t *testing.T) {
+// Property: For any multi-stage Dockerfile, the missing USER rule SHALL judge only
+// the final stage, the one that becomes the shipped image. Earlier stages are
+// discarded after the build and often need root to install packages, so a USER
+// (or its absence) there SHALL NOT produce or suppress a finding.
+func TestNoUserEvaluatesFinalStageOnly(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	parameters.MaxSize = 10
 
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("stage-specific rules evaluate per-stage, not globally", prop.ForAll(
+	properties.Property("missing USER is judged on the final stage only", prop.ForAll(
 		func(df *ast.Dockerfile) bool {
 			// Only test multi-stage Dockerfiles (2+ stages)
 			if len(df.Stages) < 2 {
 				return true // Skip single-stage Dockerfiles
 			}
 
-			// Create analyzer with only the NoUser rule to isolate the test
-			config := Config{
-				IgnoreRules: []string{},
-			}
-			analyzer := NewWithDefaults(config)
-
-			// Run analysis with only the NoUser rule
+			analyzer := NewWithDefaults(Config{IgnoreRules: []string{}})
 			findings := analyzer.AnalyzeWithRules(df, []string{rules.RuleNoUser})
 
-			// Count stages with and without USER instructions
-			stagesWithUser := make(map[int]bool)
-			stagesWithoutUser := make(map[int]bool)
-
-			for i, stage := range df.Stages {
-				hasUser := false
-				for _, instr := range stage.Instructions {
-					if _, ok := instr.(*ast.UserInstruction); ok {
-						hasUser = true
-						break
-					}
-				}
-				if hasUser {
-					stagesWithUser[i] = true
-				} else {
-					stagesWithoutUser[i] = true
+			// Generated stages all pull external images, so there is no USER
+			// inheritance: the final stage stands on its own.
+			final := df.Stages[len(df.Stages)-1]
+			finalHasUser := false
+			for _, instr := range final.Instructions {
+				if _, ok := instr.(*ast.UserInstruction); ok {
+					finalHasUser = true
+					break
 				}
 			}
 
-			// Count NoUser findings
-			noUserFindings := 0
-			for _, finding := range findings {
-				if finding.RuleID == rules.RuleNoUser {
-					noUserFindings++
-				}
+			expected := 1
+			if finalHasUser {
+				expected = 0
 			}
-
-			// The number of NoUser findings should equal the number of stages without USER
-			expectedFindings := len(stagesWithoutUser)
-
-			if noUserFindings != expectedFindings {
-				t.Logf("Expected %d NoUser findings (stages without USER), got %d", expectedFindings, noUserFindings)
-				t.Logf("Stages with USER: %v, Stages without USER: %v", stagesWithUser, stagesWithoutUser)
+			if len(findings) != expected {
+				t.Logf("final stage has USER = %v: expected %d findings, got %d", finalHasUser, expected, len(findings))
 				return false
+			}
+
+			// Any finding must point into the final stage.
+			finalStart := final.FromInstr.Line()
+			for _, finding := range findings {
+				if finding.Line < finalStart {
+					t.Logf("finding at line %d points before the final stage (line %d)", finding.Line, finalStart)
+					return false
+				}
 			}
 
 			return true

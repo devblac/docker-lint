@@ -48,13 +48,13 @@ func TestConsecutiveRunDetection(t *testing.T) {
 				return false
 			}
 
-			// Finding should be DL3010
+			// Finding should be DKL202
 			if findings[0].RuleID != RuleConsecutiveRun {
 				return false
 			}
 
-			// Finding should be a warning
-			if findings[0].Severity != ast.SeverityWarning {
+			// Finding should be informational
+			if findings[0].Severity != ast.SeverityInfo {
 				return false
 			}
 
@@ -172,12 +172,12 @@ func TestConsecutiveRunDetection(t *testing.T) {
 				return false
 			}
 
-			// Both findings should be DL3010
+			// Both findings should be DKL202
 			for _, f := range findings {
 				if f.RuleID != RuleConsecutiveRun {
 					return false
 				}
-				if f.Severity != ast.SeverityWarning {
+				if f.Severity != ast.SeverityInfo {
 					return false
 				}
 			}

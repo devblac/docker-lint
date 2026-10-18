@@ -9,10 +9,10 @@ import (
 func TestLayerRulesRegistered(t *testing.T) {
 	// Verify all layer optimization rules are registered
 	expectedRules := []string{
-		RuleCacheNotCleaned,      // DL3009
-		RuleConsecutiveRun,       // DL3010
-		RuleSuboptimalOrdering,   // DL3011
-		RuleUpdateWithoutInstall, // DL3012
+		RuleCacheNotCleaned,      // DKL201
+		RuleConsecutiveRun,       // DKL202
+		RuleSuboptimalOrdering,   // DKL203
+		RuleUpdateWithoutInstall, // DKL204
 	}
 
 	for _, ruleID := range expectedRules {
@@ -311,6 +311,54 @@ func TestSuboptimalOrderingRule(t *testing.T) {
 			t.Fatalf("expected 0 findings, got %d", len(findings))
 		}
 	})
+
+	// The recommended caching pattern: copy only the manifests into the
+	// working directory, install, then copy the rest.
+	manifestCopies := map[string][]string{
+		"go modules":        {"go.mod", "go.sum"},
+		"npm wildcard":      {"package*.json"},
+		"dotnet projects":   {"*.csproj"},
+		"python and poetry": {"pyproject.toml", "poetry.lock"},
+	}
+	for name, sources := range manifestCopies {
+		t.Run("manifest copy into ./ is not flagged: "+name, func(t *testing.T) {
+			dockerfile := &ast.Dockerfile{
+				Stages: []ast.Stage{
+					{
+						Index: 0,
+						Instructions: []ast.Instruction{
+							&ast.CopyInstruction{LineNum: 1, Sources: sources, Dest: "./"},
+							&ast.RunInstruction{LineNum: 2, Command: "go mod download"},
+							&ast.CopyInstruction{LineNum: 3, Sources: []string{"."}, Dest: "."},
+						},
+					},
+				},
+			}
+
+			if findings := rule.Check(dockerfile); len(findings) != 0 {
+				t.Fatalf("expected 0 findings, got %d", len(findings))
+			}
+		})
+	}
+
+	t.Run("broad wildcard copy is still flagged", func(t *testing.T) {
+		dockerfile := &ast.Dockerfile{
+			Stages: []ast.Stage{
+				{
+					Index: 0,
+					Instructions: []ast.Instruction{
+						&ast.CopyInstruction{LineNum: 1, Sources: []string{"*"}, Dest: "./"},
+						&ast.RunInstruction{LineNum: 2, Command: "npm install"},
+						&ast.CopyInstruction{LineNum: 3, Sources: []string{"."}, Dest: "."},
+					},
+				},
+			},
+		}
+
+		if findings := rule.Check(dockerfile); len(findings) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(findings))
+		}
+	})
 }
 
 func TestIsPackageInstallCommand(t *testing.T) {
@@ -346,6 +394,17 @@ func TestIsPackageFile(t *testing.T) {
 		{"/app/Gemfile", true},
 		{"/app/src/main.go", false},
 		{"/data/readme.md", false},
+		{"go.sum", true},
+		{"pnpm-lock.yaml", true},
+		{"requirements-dev.txt", true},
+		{"MyApp.csproj", true},
+		{"package*.json", true},
+		{"*.lock", true},
+		{"*", false},
+		{"*.go", false},
+		{".", false},
+		{"./", false},
+		{"package.json.bak", false},
 	}
 
 	for _, tt := range tests {
@@ -371,6 +430,139 @@ func TestIntToString(t *testing.T) {
 		result := intToString(tt.input)
 		if result != tt.expected {
 			t.Errorf("intToString(%d) = %s, expected %s", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestCacheNotCleanedModernPatterns(t *testing.T) {
+	rule := &CacheNotCleanedRule{}
+
+	tests := []struct {
+		name          string
+		run           *ast.RunInstruction
+		expectedCount int
+	}{
+		{
+			name:          "apt-get dist-clean cleans the lists",
+			run:           &ast.RunInstruction{LineNum: 1, Command: "apt-get update; apt-get install -y curl; apt-get dist-clean"},
+			expectedCount: 0,
+		},
+		{
+			name:          "rm with flags in another order cleans the lists",
+			run:           &ast.RunInstruction{LineNum: 1, Command: "apt-get update && apt-get install -y curl && rm -fr /var/lib/apt/lists/*"},
+			expectedCount: 0,
+		},
+		{
+			name: "apt cache mount over /var/lib/apt keeps lists out of the layer",
+			run: &ast.RunInstruction{
+				LineNum:     1,
+				Command:     "apt-get update && apt-get install -y gcc",
+				CacheMounts: []string{"/var/cache/apt", "/var/lib/apt"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "apt cache mount over the archives only still leaves the lists",
+			run: &ast.RunInstruction{
+				LineNum:     1,
+				Command:     "apt-get update && apt-get install -y gcc",
+				CacheMounts: []string{"/var/cache/apt"},
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "pip cache mount",
+			run: &ast.RunInstruction{
+				LineNum:     1,
+				Command:     "pip install -r requirements.txt",
+				CacheMounts: []string{"/root/.cache/pip"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "pip cache mount for a non-root user's home",
+			run: &ast.RunInstruction{
+				LineNum:     1,
+				Command:     "pip install -r requirements.txt",
+				CacheMounts: []string{"/home/app/.cache/"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "unrelated cache mount does not excuse pip",
+			run: &ast.RunInstruction{
+				LineNum:     1,
+				Command:     "pip install -r requirements.txt",
+				CacheMounts: []string{"/go/pkg/mod"},
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "apk cache mount",
+			run: &ast.RunInstruction{
+				LineNum:     1,
+				Command:     "apk add git",
+				CacheMounts: []string{"/var/cache/apk"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name:          "heredoc apk update and add without --no-cache",
+			run:           &ast.RunInstruction{LineNum: 1, Command: "<<EOF\napk update\napk add git\n"},
+			expectedCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dockerfile := &ast.Dockerfile{Instructions: []ast.Instruction{tt.run}}
+			if findings := rule.Check(dockerfile); len(findings) != tt.expectedCount {
+				t.Errorf("expected %d findings, got %d", tt.expectedCount, len(findings))
+			}
+		})
+	}
+}
+
+func TestSuboptimalOrderingRunDependsOnCopy(t *testing.T) {
+	rule := &SuboptimalOrderingRule{}
+
+	// The install step runs the script the COPY brought in, so the COPY cannot
+	// move after it. Taken from the official php image.
+	dockerfile := &ast.Dockerfile{
+		Stages: []ast.Stage{
+			{
+				Index: 0,
+				Instructions: []ast.Instruction{
+					&ast.CopyInstruction{LineNum: 1, Sources: []string{"docker-php-source"}, Dest: "/usr/local/bin/"},
+					&ast.RunInstruction{LineNum: 2, Command: "set -eux; apk add --no-cache gcc; docker-php-source extract"},
+					&ast.CopyInstruction{LineNum: 3, Sources: []string{"docker-php-ext-enable"}, Dest: "/usr/local/bin/"},
+				},
+			},
+		},
+	}
+
+	if findings := rule.Check(dockerfile); len(findings) != 0 {
+		t.Fatalf("expected 0 findings, got %d", len(findings))
+	}
+}
+
+func TestRunReferencesCopy(t *testing.T) {
+	tests := []struct {
+		command string
+		sources []string
+		want    bool
+	}{
+		{"./install.sh && apt-get install -y curl", []string{"scripts/install.sh"}, true},
+		{"apt-get install -y curl", []string{"scripts/install.sh"}, false},
+		// Short or wildcard names would match almost any command.
+		{"apt-get install -y curl", []string{"."}, false},
+		{"cd src && npm install", []string{"src/"}, false},
+		{"docker-php-ext-enable opcache", []string{"docker-php-ext-*"}, false},
+	}
+
+	for _, tt := range tests {
+		if got := runReferencesCopy(tt.command, tt.sources); got != tt.want {
+			t.Errorf("runReferencesCopy(%q, %v) = %v, want %v", tt.command, tt.sources, got, tt.want)
 		}
 	}
 }

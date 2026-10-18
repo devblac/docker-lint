@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -15,10 +16,27 @@ import (
 	"github.com/devblac/docker-lint/internal/rules"
 )
 
-// version is set at build time using -ldflags. Defaults to "dev" when not set.
-var version = "dev"
+// Exit codes returned by the CLI.
+const (
+	ExitSuccess    = 0 // No errors (warnings allowed in non-strict mode)
+	ExitLintErrors = 1 // Lint errors found, or warnings in strict mode
+	ExitFatal      = 2 // File not found, invalid arguments, or parse error
+)
+
+// Build information, set at build time using -ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func main() {
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+// run executes the CLI with the given arguments and streams, returning the exit code.
+// If stdin is nil, os.Stdin is used.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var (
 		jsonOutput bool
 		quiet      bool
@@ -28,54 +46,59 @@ func main() {
 		ignoreCSV  string
 	)
 
-	flag.BoolVar(&jsonOutput, "json", false, "Output findings as JSON")
-	flag.BoolVar(&jsonOutput, "j", false, "Output findings as JSON")
+	fs := flag.NewFlagSet("docker-lint", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
 
-	flag.BoolVar(&quiet, "quiet", false, "Suppress informational messages (show only warnings and errors)")
-	flag.BoolVar(&quiet, "q", false, "Suppress informational messages (show only warnings and errors)")
+	fs.BoolVar(&jsonOutput, "json", false, "")
+	fs.BoolVar(&jsonOutput, "j", false, "")
+	fs.BoolVar(&quiet, "quiet", false, "")
+	fs.BoolVar(&quiet, "q", false, "")
+	fs.BoolVar(&strict, "strict", false, "")
+	fs.BoolVar(&strict, "s", false, "")
+	fs.BoolVar(&versionFlg, "version", false, "")
+	fs.BoolVar(&versionFlg, "v", false, "")
+	fs.BoolVar(&rulesFlag, "rules", false, "")
+	fs.StringVar(&ignoreCSV, "ignore", "", "")
 
-	flag.BoolVar(&strict, "strict", false, "Treat warnings as errors")
-	flag.BoolVar(&strict, "s", false, "Treat warnings as errors")
-
-	flag.BoolVar(&versionFlg, "version", false, "Show version information")
-	flag.BoolVar(&versionFlg, "v", false, "Show version information")
-
-	flag.BoolVar(&rulesFlag, "rules", false, "List all available rules with descriptions")
-
-	flag.StringVar(&ignoreCSV, "ignore", "", "Comma-separated list of rule IDs to ignore")
-
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [flags] [file]\n", os.Args[0])
-		flag.PrintDefaults()
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printUsage(stdout)
+			return ExitSuccess
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		printUsage(stderr)
+		return ExitFatal
 	}
 
-	flag.Parse()
-
 	if versionFlg {
-		fmt.Println(version)
-		return
+		printVersion(stdout)
+		return ExitSuccess
 	}
 
 	if rulesFlag {
-		listRules()
-		return
+		listRules(stdout)
+		return ExitSuccess
 	}
 
-	args := flag.Args()
-	if len(args) > 1 {
-		fmt.Fprintln(os.Stderr, "too many arguments: only one Dockerfile path is supported")
-		os.Exit(2)
+	positional := fs.Args()
+	if len(positional) > 1 {
+		fmt.Fprintln(stderr, "Error: too many arguments: only one Dockerfile path is supported")
+		return ExitFatal
 	}
 
 	filename := "stdin"
-	var reader io.Reader = os.Stdin
+	reader := stdin
+	if reader == nil {
+		reader = os.Stdin
+	}
 
-	if len(args) == 1 {
-		filename = args[0]
+	if len(positional) == 1 {
+		filename = positional[0]
 		file, err := os.Open(filename)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to open file: %v\n", err)
-			os.Exit(2)
+			fmt.Fprintf(stderr, "Error: failed to open file: %v\n", err)
+			return ExitFatal
 		}
 		defer file.Close()
 		reader = file
@@ -83,42 +106,44 @@ func main() {
 
 	dockerfile, err := parser.ParseReader(reader)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to parse Dockerfile: %v\n", err)
-		os.Exit(2)
+		fmt.Fprintf(stderr, "Error: failed to parse Dockerfile: %v\n", err)
+		return ExitFatal
 	}
 
 	ignoreRules := parseIgnoreList(ignoreCSV)
+	warnUnknownRules(ignoreRules, stderr)
 
 	anlzr := analyzer.NewWithDefaults(analyzer.Config{IgnoreRules: ignoreRules})
 	findings := anlzr.Analyze(dockerfile)
 
-	var errorsCount, warningsCount int
+	var formatErr error
+	if jsonOutput {
+		formatErr = formatter.NewJSONFormatter(filename, quiet).Format(findings, stdout)
+	} else {
+		formatErr = formatter.NewTextFormatter(filename, quiet).Format(findings, stdout)
+	}
+	if formatErr != nil {
+		fmt.Fprintf(stderr, "Error: failed to format output: %v\n", formatErr)
+		return ExitFatal
+	}
+
+	return determineExitCode(findings, strict)
+}
+
+// determineExitCode returns ExitLintErrors if any errors exist, or if warnings
+// exist in strict mode; otherwise ExitSuccess.
+func determineExitCode(findings []ast.Finding, strict bool) int {
 	for _, finding := range findings {
 		switch finding.Severity {
 		case ast.SeverityError:
-			errorsCount++
+			return ExitLintErrors
 		case ast.SeverityWarning:
-			warningsCount++
+			if strict {
+				return ExitLintErrors
+			}
 		}
 	}
-
-	if jsonOutput {
-		jsonFormatter := formatter.NewJSONFormatter(filename, quiet)
-		if err := jsonFormatter.Format(findings, os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to format JSON output: %v\n", err)
-			os.Exit(2)
-		}
-	} else {
-		textFormatter := formatter.NewTextFormatter(filename, quiet)
-		if err := textFormatter.Format(findings, os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to format text output: %v\n", err)
-			os.Exit(2)
-		}
-	}
-
-	if errorsCount > 0 || (strict && warningsCount > 0) {
-		os.Exit(1)
-	}
+	return ExitSuccess
 }
 
 func parseIgnoreList(csv string) []string {
@@ -137,8 +162,53 @@ func parseIgnoreList(csv string) []string {
 	return result
 }
 
-func listRules() {
+// warnUnknownRules reports --ignore entries that match no rule, which would
+// otherwise silently ignore nothing. IDs from before the DKL rename get their
+// replacement named.
+func warnUnknownRules(ids []string, stderr io.Writer) {
+	for _, id := range ids {
+		if rules.DefaultRegistry.Get(id) != nil {
+			continue
+		}
+		if replacement, ok := rules.LegacyRuleIDs[id]; ok {
+			fmt.Fprintf(stderr, "Warning: rule %s was renamed to %s; --ignore %s has no effect\n", id, replacement, id)
+			continue
+		}
+		fmt.Fprintf(stderr, "Warning: unknown rule %s in --ignore; run --rules to list available rules\n", id)
+	}
+}
+
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `docker-lint - static analyzer for Dockerfiles
+
+Usage:
+  docker-lint [flags] [file]
+
+Reads from stdin when no file is given.
+
+Flags:
+  -h, --help            Show this help message
+  -v, --version         Show version information
+  -j, --json            Output findings as JSON
+  -q, --quiet           Suppress informational messages (show only warnings and errors)
+  -s, --strict          Treat warnings as errors
+      --ignore <rules>  Comma-separated list of rule IDs to ignore
+      --rules           List all available rules with descriptions
+
+Exit Codes:
+  0  No errors found (warnings allowed in non-strict mode)
+  1  Lint errors found, or warnings found in strict mode
+  2  Fatal error (invalid arguments, file not found, parse error)
+`)
+}
+
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "docker-lint version %s (commit %s, built %s)\n", version, commit, date)
+}
+
+func listRules(w io.Writer) {
+	fmt.Fprintln(w, "Available rules:")
 	for _, rule := range rules.DefaultRegistry.All() {
-		fmt.Printf("%s\t[%s]\t%s - %s\n", rule.ID(), rule.Severity().String(), rule.Name(), rule.Description())
+		fmt.Fprintf(w, "  %s\t[%s]\t%s - %s\n", rule.ID(), rule.Severity().String(), rule.Name(), rule.Description())
 	}
 }

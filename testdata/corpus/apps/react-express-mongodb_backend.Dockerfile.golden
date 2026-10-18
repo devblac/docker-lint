@@ -1,0 +1,4 @@
+21:1 warning DKL201 apt-get install without cache cleanup increases image size
+21:1 info DKL202 Found 2 consecutive RUN instructions that could be combined
+33:1 warning DKL303 No USER instruction in final stage 'dev-envs'; container will run as root
+33:1 info DKL404 No HEALTHCHECK instruction found

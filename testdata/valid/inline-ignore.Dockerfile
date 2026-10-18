@@ -1,14 +1,14 @@
 # Dockerfile with inline ignore comments
 FROM ubuntu
-# docker-lint ignore: DL3006
+# docker-lint ignore: DKL101
 FROM debian
 
 WORKDIR /app
 
-# docker-lint ignore: DL4002
+# docker-lint ignore: DKL303
 RUN apt-get update
 
-# docker-lint ignore: DL3009,DL3010
+# docker-lint ignore: DKL201,DKL202
 RUN apt-get install -y curl
 
 CMD ["./start.sh"]

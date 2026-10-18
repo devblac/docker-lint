@@ -8,42 +8,83 @@ import (
 	"github.com/devblac/docker-lint/internal/ast"
 )
 
-// Rule IDs for base image rules (DL3xxx)
+// Rule IDs use the DKL prefix and are grouped by category in hundreds:
+//
+//	DKL0xx  Dockerfile structure
+//	DKL1xx  base image
+//	DKL2xx  layers and build efficiency
+//	DKL3xx  security
+//	DKL4xx  best practices
+//
+// The prefix keeps them apart from hadolint's DLxxxx IDs.
+
+// Rule IDs for Dockerfile structure rules (DKL0xx)
 const (
-	RuleMissingTag           = "DL3006" // Missing explicit image tag
-	RuleLatestTag            = "DL3007" // Using 'latest' tag
-	RuleLargeBaseImage       = "DL3008" // Large base image without slim variant
-	RuleCacheNotCleaned      = "DL3009" // Package manager cache not cleaned
-	RuleConsecutiveRun       = "DL3010" // Consecutive RUN instructions
-	RuleSuboptimalOrdering   = "DL3011" // Suboptimal layer ordering
-	RuleUpdateWithoutInstall = "DL3012" // Package update without install
+	RuleNoFrom = "DKL001" // Instructions without a preceding FROM
 )
 
-// Rule IDs for best practice rules (DL3xxx continued)
+// Rule IDs for base image rules (DKL1xx)
 const (
-	RuleMultipleCMD        = "DL3001" // Multiple CMD instructions
-	RuleMultipleEntrypoint = "DL3002" // Multiple ENTRYPOINT instructions
-	RuleRelativeWorkdir    = "DL3003" // WORKDIR with relative path
+	RuleMissingTag     = "DKL101" // Missing explicit image tag
+	RuleLatestTag      = "DKL102" // Using 'latest' tag
+	RuleLargeBaseImage = "DKL103" // Large base image for the final image
 )
 
-// Rule IDs for security rules (DL4xxx)
+// Rule IDs for layer and build efficiency rules (DKL2xx)
 const (
-	RuleSecretInEnv = "DL4000" // Potential secret in ENV
-	RuleSecretInArg = "DL4001" // Potential secret in ARG
-	RuleNoUser      = "DL4002" // No USER instruction (running as root)
-	RuleAddWithURL  = "DL4003" // ADD with URL
-	RuleAddOverCopy = "DL4004" // ADD where COPY would suffice
+	RuleCacheNotCleaned      = "DKL201" // Package manager cache not cleaned
+	RuleConsecutiveRun       = "DKL202" // Consecutive RUN instructions
+	RuleSuboptimalOrdering   = "DKL203" // Suboptimal layer ordering
+	RuleUpdateWithoutInstall = "DKL204" // Package update without install
 )
 
-// Rule IDs for best practice rules (DL5xxx)
+// Rule IDs for security rules (DKL3xx)
 const (
-	RuleMissingHealthcheck = "DL5000" // Missing HEALTHCHECK
-	RuleWildcardCopy       = "DL5001" // Wildcard in COPY/ADD source
+	RuleSecretInEnv = "DKL301" // Potential secret in ENV
+	RuleSecretInArg = "DKL302" // Potential secret in ARG
+	RuleNoUser      = "DKL303" // Final image runs as root
+	RuleAddWithURL  = "DKL304" // ADD with URL
+	RuleAddOverCopy = "DKL305" // ADD where COPY would suffice
 )
+
+// Rule IDs for best practice rules (DKL4xx)
+const (
+	RuleMultipleCMD        = "DKL401" // Multiple CMD instructions
+	RuleMultipleEntrypoint = "DKL402" // Multiple ENTRYPOINT instructions
+	RuleRelativeWorkdir    = "DKL403" // WORKDIR with relative path
+	RuleMissingHealthcheck = "DKL404" // Missing HEALTHCHECK
+	RuleWildcardCopy       = "DKL405" // Wildcard in COPY/ADD source
+)
+
+// LegacyRuleIDs maps the DLxxxx IDs used before v0.1.0 to their replacements.
+//
+// They are deliberately not accepted as aliases: DLxxxx are hadolint's IDs and
+// name different rules there, which is why they were replaced. Knowing the
+// replacement only lets the CLI turn a silently ineffective --ignore into an
+// actionable message.
+var LegacyRuleIDs = map[string]string{
+	"DL3006": RuleMissingTag,
+	"DL3007": RuleLatestTag,
+	"DL3008": RuleLargeBaseImage,
+	"DL3009": RuleCacheNotCleaned,
+	"DL3010": RuleConsecutiveRun,
+	"DL3011": RuleSuboptimalOrdering,
+	"DL3012": RuleUpdateWithoutInstall,
+	"DL4000": RuleSecretInEnv,
+	"DL4001": RuleSecretInArg,
+	"DL4002": RuleNoUser,
+	"DL4003": RuleAddWithURL,
+	"DL4004": RuleAddOverCopy,
+	"DL3001": RuleMultipleCMD,
+	"DL3002": RuleMultipleEntrypoint,
+	"DL3003": RuleRelativeWorkdir,
+	"DL5000": RuleMissingHealthcheck,
+	"DL5001": RuleWildcardCopy,
+}
 
 // Rule defines the interface that all lint rules must implement.
 type Rule interface {
-	// ID returns the unique identifier for this rule (e.g., "DL3006").
+	// ID returns the unique identifier for this rule (e.g., "DKL101").
 	ID() string
 
 	// Name returns a short human-readable name for this rule.

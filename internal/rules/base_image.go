@@ -26,7 +26,7 @@ var largeBaseImages = map[string]string{
 	"rust":        "rust:*-slim or rust:*-alpine",
 }
 
-// MissingTagRule checks for FROM instructions without explicit image tags (DL3006).
+// MissingTagRule checks for FROM instructions without explicit image tags (DKL101).
 type MissingTagRule struct{}
 
 func (r *MissingTagRule) ID() string             { return RuleMissingTag }
@@ -40,12 +40,7 @@ func (r *MissingTagRule) Description() string {
 func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
-	for _, instr := range dockerfile.Instructions {
-		from, ok := instr.(*ast.FromInstruction)
-		if !ok {
-			continue
-		}
-
+	for _, from := range externalBaseImages(dockerfile) {
 		// Skip scratch image (special case, no tag needed)
 		if strings.ToLower(from.Image) == "scratch" {
 			continue
@@ -53,6 +48,12 @@ func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 
 		// Skip if using digest (more specific than tag)
 		if from.Digest != "" {
+			continue
+		}
+
+		// A build argument such as ${BASE} may carry its own tag; whether it
+		// does is only known at build time.
+		if containsVariable(from.Image) {
 			continue
 		}
 
@@ -72,7 +73,7 @@ func (r *MissingTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// LatestTagRule checks for FROM instructions using the 'latest' tag (DL3007).
+// LatestTagRule checks for FROM instructions using the 'latest' tag (DKL102).
 type LatestTagRule struct{}
 
 func (r *LatestTagRule) ID() string             { return RuleLatestTag }
@@ -86,12 +87,7 @@ func (r *LatestTagRule) Description() string {
 func (r *LatestTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
-	for _, instr := range dockerfile.Instructions {
-		from, ok := instr.(*ast.FromInstruction)
-		if !ok {
-			continue
-		}
-
+	for _, from := range externalBaseImages(dockerfile) {
 		// Skip scratch image
 		if strings.ToLower(from.Image) == "scratch" {
 			continue
@@ -118,7 +114,7 @@ func (r *LatestTagRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	return findings
 }
 
-// LargeBaseImageRule checks for large base images without slim variants (DL3008).
+// LargeBaseImageRule checks for large base images without slim variants (DKL103).
 type LargeBaseImageRule struct{}
 
 func (r *LargeBaseImageRule) ID() string             { return RuleLargeBaseImage }
@@ -126,11 +122,88 @@ func (r *LargeBaseImageRule) Name() string           { return "Large base image"
 func (r *LargeBaseImageRule) Severity() ast.Severity { return ast.SeverityWarning }
 
 func (r *LargeBaseImageRule) Description() string {
-	return "Consider using a smaller base image variant to reduce image size"
+	return "Consider a smaller variant (slim, alpine) for the base of the final image; build stages are not checked"
 }
 
+// Only the base of the final image matters for size: a large image used to
+// compile in an earlier stage is discarded unless the final stage builds on it.
 func (r *LargeBaseImageRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
-	var findings []ast.Finding
+	from := finalImageBase(dockerfile)
+	if from == nil {
+		return nil
+	}
+
+	// A variable tag such as python:${PY_TAG} may well resolve to a slim
+	// variant, so only judge tags that are written out.
+	if containsVariable(from.Tag) {
+		return nil
+	}
+
+	// Extract base image name (without registry prefix)
+	imageName := extractBaseImageName(from.Image)
+
+	// Check if it's a known large base image
+	alternative, isLarge := largeBaseImages[imageName]
+	if !isLarge {
+		return nil
+	}
+
+	// Check if already using a slim/alpine variant
+	if isSlimVariant(strings.ToLower(from.Tag)) {
+		return nil
+	}
+
+	return []ast.Finding{{
+		RuleID:     r.ID(),
+		Severity:   r.Severity(),
+		Line:       from.Line(),
+		Column:     1,
+		Message:    "Image '" + from.Image + "' is a large base image for the final image",
+		Suggestion: "Consider using " + alternative + " for smaller image size",
+	}}
+}
+
+// finalImageBase returns the FROM instruction of the external image the final
+// stage is built from, following "FROM <stage>" references back through earlier
+// stages. It returns nil when the Dockerfile has no FROM.
+func finalImageBase(dockerfile *ast.Dockerfile) *ast.FromInstruction {
+	var froms []*ast.FromInstruction
+	for _, instr := range dockerfile.Instructions {
+		if from, ok := instr.(*ast.FromInstruction); ok {
+			froms = append(froms, from)
+		}
+	}
+
+	// Each step moves to a strictly earlier FROM, so this terminates.
+	idx := len(froms) - 1
+	for idx >= 0 {
+		from := froms[idx]
+		parent := -1
+		if from.Tag == "" && from.Digest == "" {
+			for j := idx - 1; j >= 0; j-- {
+				if froms[j].Alias != "" && strings.EqualFold(froms[j].Alias, from.Image) {
+					parent = j
+					break
+				}
+			}
+		}
+		if parent < 0 {
+			return from
+		}
+		idx = parent
+	}
+
+	return nil
+}
+
+// externalBaseImages returns the FROM instructions that pull an image from a
+// registry, skipping those that build on an earlier stage ("FROM builder"): a
+// stage reference has no tag of its own, and its base was already checked.
+// Stage names shadow image names in Docker, so a stage called "alpine" makes a
+// later "FROM alpine" a stage reference too.
+func externalBaseImages(dockerfile *ast.Dockerfile) []*ast.FromInstruction {
+	stageNames := make(map[string]bool)
+	var froms []*ast.FromInstruction
 
 	for _, instr := range dockerfile.Instructions {
 		from, ok := instr.(*ast.FromInstruction)
@@ -138,32 +211,23 @@ func (r *LargeBaseImageRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 			continue
 		}
 
-		// Extract base image name (without registry prefix)
-		imageName := extractBaseImageName(from.Image)
-
-		// Check if it's a known large base image
-		alternative, isLarge := largeBaseImages[imageName]
-		if !isLarge {
-			continue
+		isStageRef := from.Tag == "" && from.Digest == "" && stageNames[strings.ToLower(from.Image)]
+		if !isStageRef {
+			froms = append(froms, from)
 		}
 
-		// Check if already using a slim/alpine variant
-		tag := strings.ToLower(from.Tag)
-		if isSlimVariant(tag) {
-			continue
+		if from.Alias != "" {
+			stageNames[strings.ToLower(from.Alias)] = true
 		}
-
-		findings = append(findings, ast.Finding{
-			RuleID:     r.ID(),
-			Severity:   r.Severity(),
-			Line:       from.Line(),
-			Column:     1,
-			Message:    "Image '" + from.Image + "' is a large base image",
-			Suggestion: "Consider using " + alternative + " for smaller image size",
-		})
 	}
 
-	return findings
+	return froms
+}
+
+// containsVariable reports whether s references a build argument or
+// environment variable, whose value is only known at build time.
+func containsVariable(s string) bool {
+	return strings.Contains(s, "$")
 }
 
 // extractBaseImageName extracts the image name without registry prefix.

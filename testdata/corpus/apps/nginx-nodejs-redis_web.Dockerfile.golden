@@ -1,0 +1,2 @@
+11:1 warning DKL303 No USER instruction in the final stage; container will run as root
+11:1 info DKL404 No HEALTHCHECK instruction found

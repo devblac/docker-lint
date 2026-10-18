@@ -25,7 +25,7 @@ func TestTextFormatter_Format(t *testing.T) {
 			quiet:    false,
 			findings: []ast.Finding{
 				{
-					RuleID:   "DL3006",
+					RuleID:   "DKL101",
 					Severity: ast.SeverityWarning,
 					Line:     1,
 					Column:   1,
@@ -33,7 +33,7 @@ func TestTextFormatter_Format(t *testing.T) {
 				},
 			},
 			want: []string{
-				"Dockerfile:1:1: [warning] DL3006: Missing explicit image tag",
+				"Dockerfile:1:1: [warning] DKL101: Missing explicit image tag",
 			},
 		},
 		{
@@ -42,7 +42,7 @@ func TestTextFormatter_Format(t *testing.T) {
 			quiet:    false,
 			findings: []ast.Finding{
 				{
-					RuleID:     "DL3007",
+					RuleID:     "DKL102",
 					Severity:   ast.SeverityWarning,
 					Line:       5,
 					Column:     1,
@@ -51,7 +51,7 @@ func TestTextFormatter_Format(t *testing.T) {
 				},
 			},
 			want: []string{
-				"Dockerfile:5:1: [warning] DL3007: Using 'latest' tag",
+				"Dockerfile:5:1: [warning] DKL102: Using 'latest' tag",
 				"Suggestion: Use explicit version tag like 'alpine:3.18'",
 			},
 		},
@@ -61,14 +61,14 @@ func TestTextFormatter_Format(t *testing.T) {
 			quiet:    true,
 			findings: []ast.Finding{
 				{
-					RuleID:   "DL5001",
+					RuleID:   "DKL405",
 					Severity: ast.SeverityInfo,
 					Line:     3,
 					Column:   1,
 					Message:  "Wildcard in COPY source",
 				},
 				{
-					RuleID:   "DL3006",
+					RuleID:   "DKL101",
 					Severity: ast.SeverityWarning,
 					Line:     1,
 					Column:   1,
@@ -76,10 +76,10 @@ func TestTextFormatter_Format(t *testing.T) {
 				},
 			},
 			want: []string{
-				"Dockerfile:1:1: [warning] DL3006: Missing explicit image tag",
+				"Dockerfile:1:1: [warning] DKL101: Missing explicit image tag",
 			},
 			notWant: []string{
-				"DL5001",
+				"DKL405",
 				"[info]",
 			},
 		},
@@ -89,7 +89,7 @@ func TestTextFormatter_Format(t *testing.T) {
 			quiet:    false,
 			findings: []ast.Finding{
 				{
-					RuleID:   "DL3000",
+					RuleID:   "DKL001",
 					Severity: ast.SeverityError,
 					Line:     10,
 					Column:   5,
@@ -97,7 +97,7 @@ func TestTextFormatter_Format(t *testing.T) {
 				},
 			},
 			want: []string{
-				"Dockerfile.prod:10:5: [error] DL3000: Invalid syntax",
+				"Dockerfile.prod:10:5: [error] DKL001: Invalid syntax",
 			},
 		},
 		{
@@ -150,7 +150,7 @@ func TestJSONFormatter_Format(t *testing.T) {
 			quiet:    false,
 			findings: []ast.Finding{
 				{
-					RuleID:   "DL3006",
+					RuleID:   "DKL101",
 					Severity: ast.SeverityWarning,
 					Line:     1,
 					Column:   1,
@@ -164,21 +164,21 @@ func TestJSONFormatter_Format(t *testing.T) {
 			quiet:    false,
 			findings: []ast.Finding{
 				{
-					RuleID:   "DL3000",
+					RuleID:   "DKL001",
 					Severity: ast.SeverityError,
 					Line:     1,
 					Column:   1,
 					Message:  "Error message",
 				},
 				{
-					RuleID:   "DL3006",
+					RuleID:   "DKL101",
 					Severity: ast.SeverityWarning,
 					Line:     2,
 					Column:   1,
 					Message:  "Warning message",
 				},
 				{
-					RuleID:   "DL5001",
+					RuleID:   "DKL405",
 					Severity: ast.SeverityInfo,
 					Line:     3,
 					Column:   1,
@@ -192,14 +192,14 @@ func TestJSONFormatter_Format(t *testing.T) {
 			quiet:    true,
 			findings: []ast.Finding{
 				{
-					RuleID:   "DL5001",
+					RuleID:   "DKL405",
 					Severity: ast.SeverityInfo,
 					Line:     3,
 					Column:   1,
 					Message:  "Info message",
 				},
 				{
-					RuleID:   "DL3006",
+					RuleID:   "DKL101",
 					Severity: ast.SeverityWarning,
 					Line:     1,
 					Column:   1,
@@ -285,7 +285,7 @@ func TestJSONFormatter_Format(t *testing.T) {
 func TestJSONFormatter_SchemaConformance(t *testing.T) {
 	findings := []ast.Finding{
 		{
-			RuleID:     "DL3006",
+			RuleID:     "DKL101",
 			Severity:   ast.SeverityWarning,
 			Line:       1,
 			Column:     1,
@@ -313,8 +313,8 @@ func TestJSONFormatter_SchemaConformance(t *testing.T) {
 	}
 
 	f := output.Findings[0]
-	if f.RuleID != "DL3006" {
-		t.Errorf("Finding rule_id = %q, want %q", f.RuleID, "DL3006")
+	if f.RuleID != "DKL101" {
+		t.Errorf("Finding rule_id = %q, want %q", f.RuleID, "DKL101")
 	}
 	if f.Severity != "warning" {
 		t.Errorf("Finding severity = %q, want %q", f.Severity, "warning")
