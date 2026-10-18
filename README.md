@@ -17,6 +17,24 @@ A minimal, production-grade CLI tool for statically analyzing Dockerfiles to det
 
 ## Installation
 
+### Binary Download
+
+Prebuilt binaries for Linux, macOS and Windows (amd64 and arm64) are attached to each
+[release](https://github.com/devblac/docker-lint/releases), along with a `checksums.txt`.
+
+```bash
+# Linux amd64; replace the version and platform as needed
+VERSION=0.1.0
+curl -sSLO "https://github.com/devblac/docker-lint/releases/download/v${VERSION}/docker-lint_${VERSION}_linux_amd64.tar.gz"
+curl -sSLO "https://github.com/devblac/docker-lint/releases/download/v${VERSION}/checksums.txt"
+sha256sum --check --ignore-missing checksums.txt
+tar -xzf "docker-lint_${VERSION}_linux_amd64.tar.gz" docker-lint
+sudo mv docker-lint /usr/local/bin/
+```
+
+Archives are named `docker-lint_<version>_<os>_<arch>`, with `.zip` for Windows and
+`.tar.gz` elsewhere.
+
 ### From Source
 
 Requires Go 1.22 or later (as specified in `go.mod`).
@@ -32,10 +50,6 @@ git clone https://github.com/devblac/docker-lint.git
 cd docker-lint
 go build -o docker-lint ./cmd/docker-lint
 ```
-
-### Binary Download
-
-Download the latest release from the [Releases](https://github.com/devblac/docker-lint/releases) page.
 
 ## Usage
 

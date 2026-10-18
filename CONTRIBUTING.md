@@ -93,6 +93,27 @@ go test ./internal/parser/
 4. Add unit tests for the rule
 5. Update README.md with rule documentation
 
+## Releasing
+
+Releases are built by GoReleaser from a pushed tag and land as a **draft** GitHub
+release, so nothing is public until a maintainer publishes it.
+
+1. Make sure `main` is green and `goreleaser release --snapshot --clean` builds locally
+   (CI also runs it on every pull request).
+2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a new
+   empty `## [Unreleased]` above it, and merge that change to `main`.
+3. Tag the merge commit and push the tag:
+
+   ```bash
+   git tag -a vX.Y.Z -m "docker-lint vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+4. The Release workflow runs the tests, takes the release notes from the version's
+   `CHANGELOG.md` section (it fails if there is none) and uploads the binaries and
+   `checksums.txt` to a draft release.
+5. Review the draft on the Releases page and publish it.
+
 ## Questions?
 
 Open an issue for questions or discussions.
