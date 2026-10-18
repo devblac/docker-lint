@@ -131,6 +131,7 @@ runs:
         SARIF_FILE: ${{ inputs.sarif-file }}
         UPLOAD_SARIF: ${{ inputs.upload-sarif }}
       run: |
+        # The runner starts bash with -e; failures are handled explicitly below.
         set -uo pipefail
 
         args=()
@@ -140,8 +141,8 @@ runs:
 
         # Record the exit code instead of failing here, so the SARIF report is
         # still written and uploaded when the lint finds errors.
-        docker-lint "${args[@]}" --format "$FORMAT" "$DOCKERFILE"
-        code=$?
+        code=0
+        docker-lint ${args[@]+"${args[@]}"} --format "$FORMAT" "$DOCKERFILE" || code=$?
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 
         if [ "$UPLOAD_SARIF" = true ] && [ -z "$SARIF_FILE" ]; then
@@ -150,7 +151,7 @@ runs:
         if [ -n "$SARIF_FILE" ]; then
           # A fatal error (exit 2) writes nothing to stdout; an empty report
           # would only make the upload fail with a confusing message.
-          docker-lint "${args[@]}" --format sarif "$DOCKERFILE" > "$SARIF_FILE" 2>/dev/null
+          docker-lint ${args[@]+"${args[@]}"} --format sarif "$DOCKERFILE" > "$SARIF_FILE" 2>/dev/null || true
           if [ -s "$SARIF_FILE" ]; then
             echo "sarif-file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
           else
