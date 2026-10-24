@@ -49,10 +49,13 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-# Release notes come from CHANGELOG.md (scripts/release-notes.sh), so the
-# changelog stays the single place where changes are described.
+# Release notes come from CHANGELOG.md (scripts/release-notes.sh, passed with
+# --release-notes), so the changelog stays the single place where changes are
+# described. The changelog pipe must stay enabled: it is the pipe that reads
+# --release-notes, and disabling it publishes a release with empty notes. Given
+# a notes file, it does not generate a changelog from the Git history.
 changelog:
-  disable: true
+  disable: false
 
 release:
   github:
