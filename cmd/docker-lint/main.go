@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/devblac/docker-lint/internal/analyzer"
@@ -402,7 +403,32 @@ Exit Codes:
 }
 
 func printVersion(w io.Writer) {
-	fmt.Fprintf(w, "docker-lint version %s (commit %s, built %s)\n", version, commit, date)
+	info, _ := debug.ReadBuildInfo()
+	v, c, d := buildVersion(info)
+	fmt.Fprintf(w, "docker-lint version %s (commit %s, built %s)\n", v, c, d)
+}
+
+// buildVersion returns the version, commit and build date to report. Release
+// builds set them with -ldflags. Other builds fall back to what Go records in
+// the binary: the module version for "go install ...@v0.1.0", and the VCS
+// revision and commit time for a build inside a Git checkout.
+func buildVersion(info *debug.BuildInfo) (v, c, d string) {
+	v, c, d = version, commit, date
+	if info == nil {
+		return v, c, d
+	}
+	if v == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		v = strings.TrimPrefix(info.Main.Version, "v")
+	}
+	for _, setting := range info.Settings {
+		switch {
+		case setting.Key == "vcs.revision" && c == "none":
+			c = setting.Value
+		case setting.Key == "vcs.time" && d == "unknown":
+			d = setting.Value
+		}
+	}
+	return v, c, d
 }
 
 func listRules(w io.Writer) {

@@ -15,6 +15,8 @@ notes="$(awk -v version="$version" '
 		if (found) exit
 		if (index($0, "## [" version "]") == 1) { found = 1; next }
 	}
+	# Link reference definitions at the end of the file belong to no section.
+	found && /^\[[^]]+\]: / { next }
 	found { print }
 ' "$changelog")"
 
