@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-24
+
+First release. The Changed, Removed and Fixed sections describe differences from
+the unreleased code on `main` before this version, for anyone who built it from
+source.
+
 ### Added
-- Initial project structure
 - Dockerfile parser with multi-stage build support
 - Lint rules for base images, layer optimization, security, and best practices
 - CLI with file and stdin input support
@@ -47,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--no-config` flags
 - The GitHub Action lints several paths or patterns (one per line) and takes a
   `config` input
+- `--version` falls back to the version Go records in the binary, so builds from
+  `go install github.com/devblac/docker-lint/cmd/docker-lint@v0.1.0` report it
 
 ### Changed
 - **Breaking:** rule IDs move from `DLxxxx`, which collide with hadolint's IDs for
@@ -72,9 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DKL404 (missing HEALTHCHECK) and DKL202 (consecutive RUN) are now `info`: on the
   corpus they fired on 51 and 39 of 52 files, and Kubernetes ignores HEALTHCHECK
 - DKL103 judges only the base of the final image
-
-### Deprecated
-- N/A
 
 ### Removed
 - Hand-written Dockerfile lexer (`internal/parser/lexer.go`), superseded by BuildKit
@@ -103,5 +107,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`COPY go.mod go.sum ./`, `COPY package*.json ./`) because it inspected the
   destination instead of the sources
 
-### Security
-- N/A
+[Unreleased]: https://github.com/devblac/docker-lint/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/devblac/docker-lint/releases/tag/v0.1.0

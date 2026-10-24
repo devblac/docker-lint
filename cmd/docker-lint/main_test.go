@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -864,5 +865,63 @@ func TestSARIFKeepsExitCode(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"level": "error"`) {
 		t.Errorf("expected an error-level result:\n%s", stdout.String())
+	}
+}
+
+// TestBuildVersionFallback verifies binaries built without -ldflags, such as
+// by "go install ...@v0.1.0", report the version Go recorded in the binary.
+func TestBuildVersionFallback(t *testing.T) {
+	origVersion, origCommit, origDate := version, commit, date
+	defer func() {
+		version, commit, date = origVersion, origCommit, origDate
+	}()
+
+	tests := []struct {
+		name                string
+		ldflags             [3]string
+		info                *debug.BuildInfo
+		wantV, wantC, wantD string
+	}{
+		{
+			name:    "go install from the module proxy",
+			ldflags: [3]string{"dev", "none", "unknown"},
+			info:    &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0"}},
+			wantV:   "0.1.0", wantC: "none", wantD: "unknown",
+		},
+		{
+			name:    "go build in a checkout",
+			ldflags: [3]string{"dev", "none", "unknown"},
+			info: &debug.BuildInfo{
+				Main: debug.Module{Version: "(devel)"},
+				Settings: []debug.BuildSetting{
+					{Key: "vcs.revision", Value: "abc123"},
+					{Key: "vcs.time", Value: "2026-10-24T18:00:00Z"},
+				},
+			},
+			wantV: "dev", wantC: "abc123", wantD: "2026-10-24T18:00:00Z",
+		},
+		{
+			name:    "ldflags win",
+			ldflags: [3]string{"0.2.0", "def456", "2026-11-01"},
+			info: &debug.BuildInfo{
+				Main:     debug.Module{Version: "v0.1.0"},
+				Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "abc123"}},
+			},
+			wantV: "0.2.0", wantC: "def456", wantD: "2026-11-01",
+		},
+		{
+			name:    "no build info",
+			ldflags: [3]string{"dev", "none", "unknown"},
+			wantV:   "dev", wantC: "none", wantD: "unknown",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			version, commit, date = tt.ldflags[0], tt.ldflags[1], tt.ldflags[2]
+			v, c, d := buildVersion(tt.info)
+			if v != tt.wantV || c != tt.wantC || d != tt.wantD {
+				t.Errorf("buildVersion() = %q, %q, %q; want %q, %q, %q", v, c, d, tt.wantV, tt.wantC, tt.wantD)
+			}
+		})
 	}
 }
