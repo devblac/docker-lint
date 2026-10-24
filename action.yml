@@ -7,8 +7,16 @@ branding:
 
 inputs:
   dockerfile:
-    description: Path to the Dockerfile to lint, relative to the repository root.
+    description: >-
+      What to lint, one entry per line: a Dockerfile, a directory searched
+      recursively for Dockerfiles, or a glob such as "services/**/Dockerfile".
+      Paths are relative to the repository root.
     default: Dockerfile
+  config:
+    description: >-
+      Configuration file. Defaults to the .docker-lint.yaml at the repository
+      root, when there is one.
+    default: ""
   version:
     description: >-
       docker-lint release to use: "latest" or a tag such as "v0.1.0". "source"
@@ -124,6 +132,7 @@ runs:
       shell: bash
       env:
         DOCKERFILE: ${{ inputs.dockerfile }}
+        CONFIG: ${{ inputs.config }}
         FORMAT: ${{ inputs.format }}
         STRICT: ${{ inputs.strict }}
         QUIET: ${{ inputs.quiet }}
@@ -138,25 +147,40 @@ runs:
         if [ "$STRICT" = true ]; then args+=(--strict); fi
         if [ "$QUIET" = true ]; then args+=(--quiet); fi
         if [ -n "$IGNORE" ]; then args+=(--ignore "$IGNORE"); fi
+        if [ -n "$CONFIG" ]; then args+=(--config "$CONFIG"); fi
+
+        # One path or pattern per line. Patterns stay quoted: docker-lint
+        # expands them itself, including ** on every runner OS.
+        paths=()
+        while IFS= read -r entry; do
+          entry="${entry#"${entry%%[![:space:]]*}"}"
+          entry="${entry%"${entry##*[![:space:]]}"}"
+          if [ -n "$entry" ]; then paths+=("$entry"); fi
+        done <<< "$DOCKERFILE"
+        if [ ${#paths[@]} -eq 0 ]; then
+          echo "::error::docker-lint: the dockerfile input is empty"
+          echo "exit-code=2" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
 
         # Record the exit code instead of failing here, so the SARIF report is
         # still written and uploaded when the lint finds errors.
         code=0
-        docker-lint ${args[@]+"${args[@]}"} --format "$FORMAT" "$DOCKERFILE" || code=$?
+        docker-lint ${args[@]+"${args[@]}"} --format "$FORMAT" "${paths[@]}" || code=$?
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 
         if [ "$UPLOAD_SARIF" = true ] && [ -z "$SARIF_FILE" ]; then
           SARIF_FILE=docker-lint.sarif
         fi
         if [ -n "$SARIF_FILE" ]; then
-          # A fatal error (exit 2) writes nothing to stdout; an empty report
-          # would only make the upload fail with a confusing message.
-          docker-lint ${args[@]+"${args[@]}"} --format sarif "$DOCKERFILE" > "$SARIF_FILE" 2>/dev/null || true
+          # When no file can be analyzed nothing is written to stdout; an empty
+          # report would only make the upload fail with a confusing message.
+          docker-lint ${args[@]+"${args[@]}"} --format sarif "${paths[@]}" > "$SARIF_FILE" 2>/dev/null || true
           if [ -s "$SARIF_FILE" ]; then
             echo "sarif-file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
           else
             rm -f "$SARIF_FILE"
-            echo "::warning::docker-lint: no SARIF report was written because the Dockerfile could not be analyzed"
+            echo "::warning::docker-lint: no SARIF report was written because no Dockerfile could be analyzed"
           fi
         fi
 
@@ -175,5 +199,5 @@ runs:
         case "$EXIT_CODE" in
           0) ;;
           1) echo "::error::docker-lint found errors (or warnings with strict enabled)"; exit 1 ;;
-          *) echo "::error::docker-lint could not analyze the Dockerfile (exit code $EXIT_CODE)"; exit "$EXIT_CODE" ;;
+          *) echo "::error::docker-lint could not analyze every Dockerfile (exit code $EXIT_CODE)"; exit "$EXIT_CODE" ;;
         esac

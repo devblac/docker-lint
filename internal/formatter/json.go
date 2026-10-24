@@ -50,8 +50,29 @@ func NewJSONFormatter(filename string, quiet bool) *JSONFormatter {
 
 // Format writes the findings to the given writer as valid JSON.
 func (f *JSONFormatter) Format(findings []ast.Finding, w io.Writer) error {
+	return encodeJSON(w, f.output(f.Filename, findings))
+}
+
+// FormatReports writes the findings of several files as a JSON array with one
+// object per file, each shaped like the output of Format.
+func (f *JSONFormatter) FormatReports(reports []Report, w io.Writer) error {
+	outputs := make([]JSONOutput, 0, len(reports))
+	for _, r := range reports {
+		outputs = append(outputs, f.output(r.Filename, r.Findings))
+	}
+	return encodeJSON(w, outputs)
+}
+
+func encodeJSON(w io.Writer, v interface{}) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(v)
+}
+
+// output builds the JSON object for one file.
+func (f *JSONFormatter) output(filename string, findings []ast.Finding) JSONOutput {
 	output := JSONOutput{
-		File:     f.Filename,
+		File:     filename,
 		Findings: make([]JSONFinding, 0),
 		Summary: JSONSummary{
 			Total:    0,
@@ -89,7 +110,5 @@ func (f *JSONFormatter) Format(findings []ast.Finding, w io.Writer) error {
 		output.Summary.Total++
 	}
 
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(output)
+	return output
 }

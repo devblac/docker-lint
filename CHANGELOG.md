@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Action (`uses: devblac/docker-lint@<tag>`) that installs a
   checksum-verified release binary, annotates pull requests and can upload
   SARIF to code scanning; tested on Linux, macOS and Windows runners
+- Lint several Dockerfiles in one run: pass several paths, a directory (searched
+  recursively for Dockerfiles) or a glob pattern with `**`; JSON output becomes
+  an array and SARIF a single run covering every file
+- `.docker-lint.yaml` configuration file, found in the current directory or a
+  parent up to the repository root: ignored rules, per-rule severity overrides
+  (including `off`), `strict`, `quiet` and `exclude` patterns; `--config` and
+  `--no-config` flags
+- The GitHub Action lints several paths or patterns (one per line) and takes a
+  `config` input
 
 ### Changed
 - **Breaking:** rule IDs move from `DLxxxx`, which collide with hadolint's IDs for
