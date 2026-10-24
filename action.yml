@@ -1,0 +1,179 @@
+name: docker-lint
+description: Lint Dockerfiles for inefficiencies, anti-patterns and security issues, with pull request annotations and SARIF for code scanning
+author: devblac
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  dockerfile:
+    description: Path to the Dockerfile to lint, relative to the repository root.
+    default: Dockerfile
+  version:
+    description: >-
+      docker-lint release to use: "latest" or a tag such as "v0.1.0". "source"
+      builds the action's own checkout instead (needs Go; used to test the action).
+    default: latest
+  format:
+    description: >-
+      Output format for the job log: "github" (annotations on the pull request
+      diff), "text", "json" or "sarif".
+    default: github
+  strict:
+    description: Fail on warnings, not only on errors.
+    default: "false"
+  quiet:
+    description: Hide informational findings.
+    default: "false"
+  ignore:
+    description: Comma-separated rule IDs to ignore, e.g. "DKL103,DKL404".
+    default: ""
+  sarif-file:
+    description: >-
+      Also write a SARIF report to this path. Defaults to docker-lint.sarif when
+      upload-sarif is enabled.
+    default: ""
+  upload-sarif:
+    description: >-
+      Upload the SARIF report to GitHub code scanning. Needs the
+      "security-events: write" permission, and GitHub Advanced Security on
+      private repositories.
+    default: "false"
+  github-token:
+    description: Token used to download the docker-lint release.
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: "docker-lint exit code: 0 clean, 1 lint errors (or warnings with strict), 2 fatal error."
+    value: ${{ steps.lint.outputs.exit-code }}
+  sarif-file:
+    description: Path of the SARIF report, when one was written.
+    value: ${{ steps.lint.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    # Inputs reach the scripts through env, never ${{ }} interpolation, so a
+    # crafted value cannot inject shell commands.
+    - name: Install docker-lint
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+
+        case "$RUNNER_OS" in
+          Linux) os=linux ;;
+          macOS) os=darwin ;;
+          Windows) os=windows ;;
+          *) echo "::error::docker-lint: unsupported runner OS $RUNNER_OS"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::docker-lint: unsupported runner architecture $RUNNER_ARCH"; exit 1 ;;
+        esac
+        exe=""
+        if [ "$os" = windows ]; then exe=".exe"; fi
+
+        bin_dir="$RUNNER_TEMP/docker-lint-bin"
+        mkdir -p "$bin_dir"
+
+        if [ "$VERSION" = source ]; then
+          (cd "$ACTION_PATH" && go build -o "$bin_dir/docker-lint$exe" ./cmd/docker-lint)
+        else
+          repo=devblac/docker-lint
+          tag="$VERSION"
+          if [ "$tag" = latest ]; then
+            tag="$(gh release view --repo "$repo" --json tagName --jq .tagName)"
+          fi
+          ext=tar.gz
+          if [ "$os" = windows ]; then ext=zip; fi
+          archive="docker-lint_${tag#v}_${os}_${arch}.${ext}"
+
+          download="$RUNNER_TEMP/docker-lint-download"
+          rm -rf "$download"
+          mkdir -p "$download"
+          gh release download "$tag" --repo "$repo" --dir "$download" \
+            --pattern "$archive" --pattern checksums.txt
+
+          cd "$download"
+          grep " ${archive}\$" checksums.txt > expected.sha256
+          if command -v sha256sum >/dev/null; then
+            sha256sum --check expected.sha256
+          else
+            shasum -a 256 --check expected.sha256
+          fi
+
+          if [ "$ext" = zip ]; then
+            if command -v unzip >/dev/null; then unzip -q -o "$archive"; else 7z x -y "$archive" >/dev/null; fi
+          else
+            tar -xzf "$archive"
+          fi
+          mv "docker-lint$exe" "$bin_dir/"
+        fi
+
+        echo "$bin_dir" >> "$GITHUB_PATH"
+        "$bin_dir/docker-lint$exe" --version
+
+    - name: Lint Dockerfile
+      id: lint
+      shell: bash
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        FORMAT: ${{ inputs.format }}
+        STRICT: ${{ inputs.strict }}
+        QUIET: ${{ inputs.quiet }}
+        IGNORE: ${{ inputs.ignore }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+        UPLOAD_SARIF: ${{ inputs.upload-sarif }}
+      run: |
+        # The runner starts bash with -e; failures are handled explicitly below.
+        set -uo pipefail
+
+        args=()
+        if [ "$STRICT" = true ]; then args+=(--strict); fi
+        if [ "$QUIET" = true ]; then args+=(--quiet); fi
+        if [ -n "$IGNORE" ]; then args+=(--ignore "$IGNORE"); fi
+
+        # Record the exit code instead of failing here, so the SARIF report is
+        # still written and uploaded when the lint finds errors.
+        code=0
+        docker-lint ${args[@]+"${args[@]}"} --format "$FORMAT" "$DOCKERFILE" || code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+        if [ "$UPLOAD_SARIF" = true ] && [ -z "$SARIF_FILE" ]; then
+          SARIF_FILE=docker-lint.sarif
+        fi
+        if [ -n "$SARIF_FILE" ]; then
+          # A fatal error (exit 2) writes nothing to stdout; an empty report
+          # would only make the upload fail with a confusing message.
+          docker-lint ${args[@]+"${args[@]}"} --format sarif "$DOCKERFILE" > "$SARIF_FILE" 2>/dev/null || true
+          if [ -s "$SARIF_FILE" ]; then
+            echo "sarif-file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
+          else
+            rm -f "$SARIF_FILE"
+            echo "::warning::docker-lint: no SARIF report was written because the Dockerfile could not be analyzed"
+          fi
+        fi
+
+    - name: Upload SARIF to code scanning
+      if: inputs.upload-sarif == 'true' && steps.lint.outputs.sarif-file != ''
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.lint.outputs.sarif-file }}
+        category: docker-lint
+
+    - name: Report result
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.lint.outputs.exit-code }}
+      run: |
+        case "$EXIT_CODE" in
+          0) ;;
+          1) echo "::error::docker-lint found errors (or warnings with strict enabled)"; exit 1 ;;
+          *) echo "::error::docker-lint could not analyze the Dockerfile (exit code $EXIT_CODE)"; exit "$EXIT_CODE" ;;
+        esac

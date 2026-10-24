@@ -63,7 +63,8 @@ docker-lint [flags] [file]
 |------|-------|-------------|
 | `--help` | `-h` | Show help message |
 | `--version` | `-v` | Show version information |
-| `--json` | `-j` | Output findings as JSON |
+| `--format <fmt>` | `-f` | Output format: `text` (default), `json`, `sarif`, `github` |
+| `--json` | `-j` | Shorthand for `--format json` |
 | `--quiet` | `-q` | Suppress informational messages (show only warnings and errors) |
 | `--strict` | `-s` | Treat warnings as errors (exit code 1 if any warnings) |
 | `--ignore <rules>` | | Comma-separated list of rule IDs to ignore |
@@ -175,11 +176,11 @@ Human-readable output with file path, line number, severity, rule ID, and messag
 ```
 Dockerfile:1:1: [warning] DKL102: Using 'latest' tag for image 'ubuntu' is not recommended
   Suggestion: Pin to a specific version like 'ubuntu:<version>' for reproducible builds
-Dockerfile:3:1: [warning] DKL202: Found 2 consecutive RUN instructions that could be combined
+Dockerfile:3:1: [info] DKL202: Found 2 consecutive RUN instructions that could be combined
   Suggestion: Combine RUN instructions using '&&' to reduce layers
 ```
 
-### JSON (`--json`)
+### JSON (`--format json`)
 
 Machine-readable JSON output for CI/CD integration:
 
@@ -205,21 +206,70 @@ Machine-readable JSON output for CI/CD integration:
 }
 ```
 
+### SARIF (`--format sarif`)
+
+[SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html), the format GitHub code
+scanning and other security dashboards ingest. The report carries every rule's metadata, so findings show
+up with their name, description and severity. The exit code is unchanged, so CI still fails on errors while
+the report is uploaded.
+
+### GitHub annotations (`--format github`)
+
+GitHub Actions workflow commands, which GitHub renders as annotations on the changed lines of a pull
+request. They need no code scanning, so they work in private repositories without GitHub Advanced Security:
+
+```
+::warning file=Dockerfile,line=1,col=1,title=DKL102::Using 'latest' tag for image 'ubuntu' is not recommended
+```
+
 ## CI/CD Integration
 
 The repository's CI workflow runs `go test ./... -cover`. Coverage uploads to Codecov are attempted only when a `CODECOV_TOKEN` secret is configured; otherwise the upload step is skipped while tests still gate the build.
 
 ### GitHub Actions
 
+The docker-lint action installs a release binary (checksum-verified), lints a Dockerfile and annotates the
+pull request diff with the findings:
+
 ```yaml
-- name: Lint Dockerfile
-  run: |
-    docker-lint --strict --json Dockerfile > lint-results.json
-    if [ $? -ne 0 ]; then
-      cat lint-results.json
-      exit 1
-    fi
+- uses: actions/checkout@v7
+- uses: devblac/docker-lint@v0.1.0
+  with:
+    dockerfile: Dockerfile
 ```
+
+To also see findings in the repository's **Security** tab, upload SARIF to code scanning. This needs the
+`security-events: write` permission, and GitHub Advanced Security on private repositories:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+
+steps:
+  - uses: actions/checkout@v7
+  - uses: devblac/docker-lint@v0.1.0
+    with:
+      dockerfile: services/api/Dockerfile
+      strict: true
+      ignore: DKL404
+      upload-sarif: true
+```
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `dockerfile` | `Dockerfile` | Path to the Dockerfile, relative to the repository root |
+| `version` | `latest` | docker-lint release to install, e.g. `v0.1.0` |
+| `format` | `github` | Log output: `github` (annotations), `text`, `json` or `sarif` |
+| `strict` | `false` | Fail on warnings, not only on errors |
+| `quiet` | `false` | Hide informational findings |
+| `ignore` | | Comma-separated rule IDs to ignore |
+| `sarif-file` | | Also write a SARIF report here (`docker-lint.sarif` when uploading) |
+| `upload-sarif` | `false` | Upload the SARIF report to GitHub code scanning |
+
+The action fails the step with docker-lint's exit code and exposes it as the `exit-code` output. A SARIF
+report is still written and uploaded when the lint fails; a Dockerfile that cannot be parsed produces no
+report rather than an empty one.
 
 ### GitLab CI
 

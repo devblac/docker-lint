@@ -806,3 +806,63 @@ func TestNoFromIsLintError(t *testing.T) {
 		t.Errorf("expected DKL001 error, got: %q", stdout.String())
 	}
 }
+
+// TestFormatFlag verifies each output format end to end through the CLI.
+func TestFormatFlag(t *testing.T) {
+	path := createTempDockerfile(t, "FROM alpine\nUSER nobody\n")
+
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--format", "text", path}, "[warning] DKL101"},
+		{[]string{"--format", "json", path}, `"rule_id": "DKL101"`},
+		{[]string{"-f", "sarif", path}, `"version": "2.1.0"`},
+		{[]string{"--format", "github", path}, "::warning file="},
+		{[]string{"--json", "--format", "json", path}, `"rule_id": "DKL101"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args[:len(tt.args)-1], " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(tt.args, nil, &stdout, &stderr); code != ExitSuccess {
+				t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), tt.want) {
+				t.Errorf("output missing %q:\n%s", tt.want, stdout.String())
+			}
+		})
+	}
+}
+
+// TestFormatFlagErrors verifies invalid format combinations are fatal.
+func TestFormatFlagErrors(t *testing.T) {
+	path := createTempDockerfile(t, "FROM alpine:3.20\n")
+
+	for _, args := range [][]string{
+		{"--format", "xml", path},
+		{"--json", "--format", "sarif", path},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, nil, &stdout, &stderr); code != ExitFatal {
+			t.Errorf("%v: exit code %d, want %d", args, code, ExitFatal)
+		}
+		if !strings.Contains(stderr.String(), "Error:") {
+			t.Errorf("%v: expected an error on stderr, got %q", args, stderr.String())
+		}
+	}
+}
+
+// TestSARIFKeepsExitCode verifies SARIF output does not change the exit code,
+// so CI still fails on errors while the report is uploaded.
+func TestSARIFKeepsExitCode(t *testing.T) {
+	path := createTempDockerfile(t, "RUN echo hi\n")
+	var stdout, stderr bytes.Buffer
+
+	if code := run([]string{"--format", "sarif", path}, nil, &stdout, &stderr); code != ExitLintErrors {
+		t.Errorf("exit code %d, want %d", code, ExitLintErrors)
+	}
+	if !strings.Contains(stdout.String(), `"level": "error"`) {
+		t.Errorf("expected an error-level result:\n%s", stdout.String())
+	}
+}
