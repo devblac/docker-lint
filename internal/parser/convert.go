@@ -66,9 +66,9 @@ func convertCommand(cmd interface{}, line int, raw string) ([]ast.Instruction, e
 
 	case *instructions.AddCommand:
 		return one(&ast.AddInstruction{
-			LineNum: line,
-			RawText: raw,
-			Sources: c.SourcePaths,
+			LineNum:  line,
+			RawText:  raw,
+			Sources:  c.SourcePaths,
 			Dest:     c.DestPath,
 			Chown:    c.Chown,
 			Checksum: c.Checksum,

@@ -130,9 +130,9 @@ func (c *CopyInstruction) Type() InstructionType { return InstrCOPY }
 
 // AddInstruction represents an ADD instruction.
 type AddInstruction struct {
-	LineNum int
-	RawText string
-	Sources []string
+	LineNum  int
+	RawText  string
+	Sources  []string
 	Dest     string
 	Chown    string // --chown flag
 	Checksum string // --checksum flag, which verifies a remote source
