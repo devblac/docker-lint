@@ -302,3 +302,29 @@ func TestWildcardCopyRule(t *testing.T) {
 		})
 	}
 }
+
+// TestWildcardCopyManifests verifies a wildcard selecting only dependency
+// manifests, the recommended way to copy them before installing, is not
+// reported, while other wildcards still are.
+func TestWildcardCopyManifests(t *testing.T) {
+	rule := &WildcardCopyRule{}
+	tests := []struct {
+		sources []string
+		want    int
+	}{
+		{[]string{"package*.json"}, 0},
+		{[]string{"*.csproj"}, 0},
+		{[]string{"package*.json", "tsconfig.json"}, 0},
+		{[]string{"*.py"}, 1},
+		{[]string{"docker-php-ext-*", "docker-php-entrypoint"}, 1},
+		{[]string{"package*.json", "src/*"}, 1},
+	}
+	for _, tt := range tests {
+		df := &ast.Dockerfile{Instructions: []ast.Instruction{
+			&ast.CopyInstruction{LineNum: 1, Sources: tt.sources, Dest: "./"},
+		}}
+		if got := len(rule.Check(df)); got != tt.want {
+			t.Errorf("COPY %v: got %d findings, want %d", tt.sources, got, tt.want)
+		}
+	}
+}
