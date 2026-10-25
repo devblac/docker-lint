@@ -25,7 +25,7 @@ Prebuilt binaries for Linux, macOS and Windows (amd64 and arm64) are attached to
 
 ```bash
 # Linux amd64; replace the version and platform as needed
-VERSION=0.1.0
+VERSION=0.1.1
 curl -sSLO "https://github.com/devblac/docker-lint/releases/download/v${VERSION}/docker-lint_${VERSION}_linux_amd64.tar.gz"
 curl -sSLO "https://github.com/devblac/docker-lint/releases/download/v${VERSION}/checksums.txt"
 sha256sum --check --ignore-missing checksums.txt
@@ -174,7 +174,7 @@ the exit code is then 2.
 docker-lint includes 18 built-in rules. Rule IDs use the `DKL` prefix and are grouped by category in hundreds:
 `DKL0xx` structure, `DKL1xx` base image, `DKL2xx` layers, `DKL3xx` security, `DKL4xx` best practices.
 
-> **Renamed rule IDs.** Before v0.1.0, rules used `DLxxxx` IDs, which collide with
+> **Renamed rule IDs.** Before v0.1.1, the first release, rules used `DLxxxx` IDs, which collide with
 > [hadolint](https://github.com/hadolint/hadolint)'s IDs for different rules. The old IDs are not accepted;
 > passing one to `--ignore` prints its replacement. See the [CHANGELOG](CHANGELOG.md) for the full mapping.
 
@@ -288,7 +288,7 @@ the pull request diff with the findings:
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: devblac/docker-lint@v0.1.0
+- uses: devblac/docker-lint@v0.1.1
   with:
     dockerfile: Dockerfile
 ```
@@ -303,7 +303,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v7
-  - uses: devblac/docker-lint@v0.1.0
+  - uses: devblac/docker-lint@v0.1.1
     with:
       dockerfile: |
         Dockerfile
