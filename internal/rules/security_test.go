@@ -555,3 +555,55 @@ func TestIsArchiveFile(t *testing.T) {
 		})
 	}
 }
+
+// TestAddRemoteSources verifies DKL304 and DKL305 on the forms of ADD that
+// fetch remote content: plain URLs, URLs pinned with --checksum, and Git
+// repositories, which COPY cannot fetch either.
+func TestAddRemoteSources(t *testing.T) {
+	tests := []struct {
+		name         string
+		add          *ast.AddInstruction
+		wantURL      bool // DKL304
+		wantCopyOver bool // DKL305
+	}{
+		{
+			name:    "plain URL",
+			add:     &ast.AddInstruction{LineNum: 1, Sources: []string{"https://example.com/tool.sh"}, Dest: "/tool.sh"},
+			wantURL: true,
+		},
+		{
+			name: "URL pinned with --checksum",
+			add: &ast.AddInstruction{LineNum: 1, Sources: []string{"https://example.com/tool.tar.gz"}, Dest: "/tool",
+				Checksum: "sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d"},
+		},
+		{
+			name: "Git repository over HTTPS at a ref",
+			add:  &ast.AddInstruction{LineNum: 1, Sources: []string{"https://github.com/moby/buildkit.git#v0.10.1"}, Dest: "/src"},
+		},
+		{
+			name: "Git repository over SSH",
+			add:  &ast.AddInstruction{LineNum: 1, Sources: []string{"git@github.com:moby/buildkit.git"}, Dest: "/src"},
+		},
+		{
+			name: "local archive is extracted",
+			add:  &ast.AddInstruction{LineNum: 1, Sources: []string{"app.tar.gz"}, Dest: "/app"},
+		},
+		{
+			name:         "local file",
+			add:          &ast.AddInstruction{LineNum: 1, Sources: []string{"app.py"}, Dest: "/app.py"},
+			wantCopyOver: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			df := &ast.Dockerfile{Instructions: []ast.Instruction{tt.add}}
+			if got := len((&AddWithURLRule{}).Check(df)) > 0; got != tt.wantURL {
+				t.Errorf("DKL304 reported = %v, want %v", got, tt.wantURL)
+			}
+			if got := len((&AddOverCopyRule{}).Check(df)) > 0; got != tt.wantCopyOver {
+				t.Errorf("DKL305 reported = %v, want %v", got, tt.wantCopyOver)
+			}
+		})
+	}
+}

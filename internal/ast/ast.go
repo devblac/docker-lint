@@ -133,8 +133,9 @@ type AddInstruction struct {
 	LineNum int
 	RawText string
 	Sources []string
-	Dest    string
-	Chown   string // --chown flag
+	Dest     string
+	Chown    string // --chown flag
+	Checksum string // --checksum flag, which verifies a remote source
 }
 
 func (a *AddInstruction) Line() int             { return a.LineNum }

@@ -350,3 +350,17 @@ func TestParseInlineIgnoreAcrossBlankLines(t *testing.T) {
 		t.Errorf("InlineIgnores[5] = %v, want [DKL102]", rules)
 	}
 }
+
+func TestParseAddChecksum(t *testing.T) {
+	df, err := ParseString("FROM alpine:3.20\nADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://example.com/a.tar.gz /a\n")
+	if err != nil {
+		t.Fatalf("ParseString() error = %v", err)
+	}
+	add, ok := df.Instructions[1].(*ast.AddInstruction)
+	if !ok {
+		t.Fatalf("instruction 1 = %T, want *ast.AddInstruction", df.Instructions[1])
+	}
+	if want := "sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d"; add.Checksum != want {
+		t.Errorf("Checksum = %q, want %q", add.Checksum, want)
+	}
+}

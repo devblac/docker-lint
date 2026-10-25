@@ -77,6 +77,16 @@ var metadataSuffixes = map[string]bool{
 // urlPattern matches URLs in ADD sources
 var urlPattern = regexp.MustCompile(`^https?://`)
 
+// gitSourcePattern matches the Git repositories ADD can fetch: git@host:repo,
+// git:// and ssh:// URLs, and HTTP(S) URLs ending in .git with an optional #ref.
+var gitSourcePattern = regexp.MustCompile(`^(git@|git://|ssh://)|^https?://\S+\.git(#\S*)?$`)
+
+// isRemoteSource reports whether an ADD source is fetched from the network
+// rather than taken from the build context.
+func isRemoteSource(source string) bool {
+	return urlPattern.MatchString(source) || gitSourcePattern.MatchString(source)
+}
+
 // archiveExtensions contains file extensions that indicate archive files
 var archiveExtensions = []string{
 	".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz",
@@ -306,16 +316,23 @@ func (r *AddWithURLRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 			continue
 		}
 
-		// Check if any source is a URL
+		// ADD --checksum verifies the download, which is what Docker now
+		// recommends for remote files instead of curl or wget.
+		if add.Checksum != "" {
+			continue
+		}
+
+		// Check if any source is a plain URL. Git repositories are fetched at a
+		// pinned ref, which RUN curl cannot do.
 		for _, source := range add.Sources {
-			if urlPattern.MatchString(source) {
+			if urlPattern.MatchString(source) && !gitSourcePattern.MatchString(source) {
 				findings = append(findings, ast.Finding{
 					RuleID:     r.ID(),
 					Severity:   r.Severity(),
 					Line:       add.Line(),
 					Column:     1,
 					Message:    "ADD with URL source is not recommended",
-					Suggestion: "Use 'RUN curl -o <dest> <url>' or 'RUN wget -O <dest> <url>' for better caching and security",
+					Suggestion: "Pin the download with 'ADD --checksum=sha256:<hash> <url>', or fetch it with curl or wget in a RUN instruction",
 				})
 				break // Only report once per ADD instruction
 			}
@@ -350,8 +367,8 @@ func (r *AddOverCopyRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		hasArchive := false
 
 		for _, source := range add.Sources {
-			// Check for URL
-			if urlPattern.MatchString(source) {
+			// Check for a URL or Git repository, which COPY cannot fetch
+			if isRemoteSource(source) {
 				hasURL = true
 				break
 			}

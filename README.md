@@ -207,7 +207,7 @@ docker-lint includes 18 built-in rules. Rule IDs use the `DKL` prefix and are gr
 | DKL301 | Warning | Potential secret in ENV | Avoid storing secrets in ENV instructions as they persist in the image layers |
 | DKL302 | Warning | Potential secret in ARG | Avoid storing secrets in ARG instructions as they are visible in image history |
 | DKL303 | Warning | Final image runs as root | The final image should not run as root; set a non-root USER in the final stage. Build stages are not checked, and a USER inherited from an earlier stage counts |
-| DKL304 | Warning | ADD with URL | Using ADD with URLs is discouraged; use curl or wget in RUN for better control |
+| DKL304 | Warning | ADD with URL | An unverified download: pin it with `ADD --checksum=sha256:...` or fetch it in RUN. Git repositories (`ADD https://.../repo.git#ref`) are not reported |
 | DKL305 | Warning | ADD where COPY would suffice | Use COPY instead of ADD when not extracting archives or fetching URLs |
 
 ### Best Practice Rules
