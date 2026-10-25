@@ -687,3 +687,35 @@ func TestSuboptimalOrderingWholeContext(t *testing.T) {
 		})
 	}
 }
+
+// TestCacheNotCleanedPipEnv verifies PIP_NO_CACHE_DIR in the environment
+// counts as --no-cache-dir, within its own stage only.
+func TestCacheNotCleanedPipEnv(t *testing.T) {
+	rule := &CacheNotCleanedRule{}
+	from := func(line int) *ast.FromInstruction {
+		return &ast.FromInstruction{LineNum: line, Image: "python", Tag: "3.12-slim"}
+	}
+	pip := func(line int, cmd string) *ast.RunInstruction {
+		return &ast.RunInstruction{LineNum: line, Command: cmd}
+	}
+
+	tests := []struct {
+		name   string
+		instrs []ast.Instruction
+		want   int
+	}{
+		{"ENV disables the cache", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: "1"}, pip(3, "pip install flask")}, 0},
+		{"any non-empty value counts, as in pip", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: "off"}, pip(3, "pip install flask")}, 0},
+		{"empty value does not", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: ""}, pip(3, "pip install flask")}, 1},
+		{"set for the command", []ast.Instruction{from(1), pip(2, "PIP_NO_CACHE_DIR=1 pip install flask")}, 0},
+		{"ENV of an earlier stage does not carry over", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: "1"}, from(3), pip(4, "pip install flask")}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			df := &ast.Dockerfile{Instructions: tt.instrs}
+			if got := rule.Check(df); len(got) != tt.want {
+				t.Errorf("got %d findings, want %d", len(got), tt.want)
+			}
+		})
+	}
+}

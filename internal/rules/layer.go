@@ -33,6 +33,9 @@ var (
 	// pipNoCachePattern matches pip install --no-cache-dir
 	pipNoCachePattern = regexp.MustCompile(`pip[3]?\s+install\s+[^\n]*--no-cache-dir`)
 
+	// pipNoCacheEnvPattern matches PIP_NO_CACHE_DIR set for the command itself
+	pipNoCacheEnvPattern = regexp.MustCompile(`\bPIP_NO_CACHE_DIR=\S`)
+
 	// Package update patterns (without install in same command)
 	aptGetUpdatePattern = regexp.MustCompile(`apt-get\s+update`)
 	yumUpdatePattern    = regexp.MustCompile(`(yum|dnf)\s+(update|upgrade)`)
@@ -52,7 +55,21 @@ func (r *CacheNotCleanedRule) Description() string {
 func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
+	// pipNoCacheEnv is set while the current stage has PIP_NO_CACHE_DIR in its
+	// environment. pip disables its cache for any non-empty value, even
+	// "false", for backward compatibility.
+	pipNoCacheEnv := false
+
 	for _, instr := range dockerfile.Instructions {
+		switch v := instr.(type) {
+		case *ast.FromInstruction:
+			pipNoCacheEnv = false
+		case *ast.EnvInstruction:
+			if v.Key == "PIP_NO_CACHE_DIR" {
+				pipNoCacheEnv = v.Value != ""
+			}
+		}
+
 		run, ok := instr.(*ast.RunInstruction)
 		if !ok {
 			continue
@@ -106,7 +123,8 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		}
 
 		// Check pip install without --no-cache-dir
-		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) && !hasPipCacheMount(run) {
+		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) && !hasPipCacheMount(run) &&
+			!pipNoCacheEnv && !pipNoCacheEnvPattern.MatchString(cmd) {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
