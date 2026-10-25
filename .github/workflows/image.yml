@@ -1,0 +1,100 @@
+name: Image
+
+# Builds and tests the container image on pull requests, and publishes it to
+# GitHub Container Registry when a release is published. Publishing waits for
+# the release (not the tag), so nothing becomes public before the release does.
+on:
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # On a release: 0.1.1 and 0.1, plus latest unless it is a prerelease.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build information
+        id: build
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'release' && steps.meta.outputs.version || 'dev' }}
+        run: |
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build the image for testing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: docker-lint:test
+          build-args: |
+            VERSION=${{ steps.build.outputs.version }}
+            COMMIT=${{ steps.build.outputs.commit }}
+            DATE=${{ steps.build.outputs.date }}
+
+      - name: Test the image
+        run: |
+          set -euo pipefail
+          docker run --rm docker-lint:test --version
+
+          # Standard input, and a mounted directory as the working directory.
+          docker run --rm -i docker-lint:test < testdata/valid/minimal.Dockerfile
+          code=0
+          docker run --rm -v "$PWD/testdata:/work:ro" docker-lint:test invalid/no-from.Dockerfile || code=$?
+          test "$code" = 1
+
+          # The image's own Dockerfile passes its own linter.
+          docker run --rm -v "$PWD:/work:ro" docker-lint:test --strict Dockerfile
+
+      # Cross-compiles, so it is cheap; catches an arm64 failure before release.
+      - name: Build every platform
+        if: github.event_name != 'release'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'release'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the image
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.build.outputs.version }}
+            COMMIT=${{ steps.build.outputs.commit }}
+            DATE=${{ steps.build.outputs.date }}

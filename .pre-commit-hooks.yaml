@@ -1,0 +1,31 @@
+# pre-commit hooks for docker-lint. In a project's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/devblac/docker-lint
+#       rev: v0.1.1
+#       hooks:
+#         - id: docker-lint          # builds docker-lint with Go
+#         # or
+#         - id: docker-lint-docker   # runs the container image instead
+#
+# Both pass the staged Dockerfiles to docker-lint, which also reads the
+# project's .docker-lint.yaml. Templates such as Dockerfile.template are left
+# out, as in a directory search.
+
+- id: docker-lint
+  name: docker-lint
+  description: Lint Dockerfiles for inefficiencies, anti-patterns and security issues.
+  entry: docker-lint
+  language: golang
+  files: &dockerfiles (?i)(^|/)(dockerfile|containerfile)(\.[^/]*)?$|\.(dockerfile|containerfile)$
+  exclude: &not-dockerfiles (?i)\.(dockerignore|template|tmpl|tpl|j2|jinja2?|erb|mustache|in|bak|orig|old|swp|rej|md|txt|sample|example)$
+  require_serial: true
+
+- id: docker-lint-docker
+  name: docker-lint (Docker)
+  description: Lint Dockerfiles with the docker-lint container image; needs Docker but not Go.
+  entry: ghcr.io/devblac/docker-lint:0.1.1
+  language: docker_image
+  files: *dockerfiles
+  exclude: *not-dockerfiles
+  require_serial: true
