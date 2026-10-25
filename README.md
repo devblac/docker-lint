@@ -58,7 +58,9 @@ docker-lint [flags] [path ...]
 ```
 
 Each path is a Dockerfile, a directory, or a glob pattern. A directory is searched recursively for files named
-`Dockerfile`, `Containerfile`, `Dockerfile.*` or `*.Dockerfile` (skipping `.git` and `node_modules`). Patterns
+`Dockerfile`, `Containerfile`, `Dockerfile.*` or `*.Dockerfile` (skipping `.git` and `node_modules`, and templates,
+backups and docs such as `Dockerfile.template`, `Dockerfile.j2` or `Dockerfile.bak`, which name a file explicitly
+to lint). Patterns
 support `**` for any number of directories and are expanded by docker-lint itself, so quote them to make them
 work the same in every shell, including on Windows. A directory or pattern that matches no Dockerfile is a fatal
 error, so a CI job cannot pass without linting anything. With no path, docker-lint reads from stdin.
@@ -142,8 +144,9 @@ strict: true
 # Hide informational findings (same as --quiet).
 quiet: false
 
-# Skip matching files when a directory or pattern is expanded. A pattern without
-# a slash matches a file or directory name anywhere, as in .gitignore.
+# Skip matching files when a directory or pattern is expanded. Patterns are
+# relative to this file's directory; one without a slash matches a file or
+# directory name anywhere, as in .gitignore.
 exclude:
   - vendor
   - "examples/**"

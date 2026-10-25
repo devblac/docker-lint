@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 
@@ -134,7 +135,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		SeverityOverrides: cfg.SeverityOverrides(),
 	})
 
-	reports, single, fatal := lintInputs(fs.Args(), cfg.Exclude, stdin, anlzr, stderr)
+	// Exclude patterns are relative to the configuration file's directory.
+	exclude := files.Exclusions{Patterns: cfg.Exclude}
+	if cfgPath != "" {
+		exclude.Base = filepath.Dir(cfgPath)
+	}
+
+	reports, single, fatal := lintInputs(fs.Args(), exclude, stdin, anlzr, stderr)
 
 	out := output{format: outputFormat, quiet: quiet, tool: toolInfo(cfg)}
 	if formatErr := out.write(reports, single, stdout); formatErr != nil {
@@ -177,7 +184,7 @@ func loadConfig(path string, disabled bool) (*config.Config, string, error) {
 // paths expand to. A file that cannot be read or parsed is reported on stderr
 // and skipped, and fatal is set; the other files are still linted. single is
 // true when the input is stdin or one file named directly.
-func lintInputs(paths, exclude []string, stdin io.Reader, anlzr *analyzer.Analyzer, stderr io.Writer) (reports []formatter.Report, single, fatal bool) {
+func lintInputs(paths []string, exclude files.Exclusions, stdin io.Reader, anlzr *analyzer.Analyzer, stderr io.Writer) (reports []formatter.Report, single, fatal bool) {
 	if len(paths) == 0 {
 		if stdin == nil {
 			stdin = os.Stdin

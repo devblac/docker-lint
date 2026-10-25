@@ -27,7 +27,7 @@ import (
 //
 // Paths found by expansion use forward slashes. The result has no duplicates
 // and keeps the order of the arguments.
-func Expand(args []string, exclude []string) ([]string, error) {
+func Expand(args []string, exclude Exclusions) ([]string, error) {
 	var result []string
 	seen := make(map[string]bool)
 	add := func(p string) {
@@ -76,14 +76,28 @@ func Expand(args []string, exclude []string) ([]string, error) {
 	return result, nil
 }
 
+// notDockerfileExtensions mark files named after a Dockerfile that are not one
+// Docker can build: per-Dockerfile ignore files, templates rendered into a
+// Dockerfile, editor and merge backups, and documentation.
+var notDockerfileExtensions = []string{
+	".dockerignore",
+	".template", ".tmpl", ".tpl", ".j2", ".jinja", ".jinja2", ".erb", ".mustache", ".in",
+	".bak", ".orig", ".old", ".swp", ".rej",
+	".md", ".txt", ".sample", ".example",
+}
+
 // IsDockerfile reports whether a file name follows a Dockerfile naming
 // convention: Dockerfile, Containerfile, Dockerfile.<suffix> or
-// <prefix>.Dockerfile, in any letter case. Dockerfile-specific ignore files
-// (Dockerfile.dockerignore) are not Dockerfiles.
+// <prefix>.Dockerfile, in any letter case. Names ending in a template, backup
+// or documentation extension (Dockerfile.template, Dockerfile.bak) are not
+// Dockerfiles; directory searches skip them, so one unrendered template does
+// not fail the whole run. Name such a file explicitly to lint it anyway.
 func IsDockerfile(name string) bool {
 	lower := strings.ToLower(name)
-	if strings.HasSuffix(lower, ".dockerignore") {
-		return false
+	for _, ext := range notDockerfileExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return false
+		}
 	}
 	for _, base := range []string{"dockerfile", "containerfile"} {
 		if lower == base || strings.HasPrefix(lower, base+".") || strings.HasSuffix(lower, "."+base) {
@@ -93,7 +107,7 @@ func IsDockerfile(name string) bool {
 	return false
 }
 
-func expandDir(dir string, exclude []string) ([]string, error) {
+func expandDir(dir string, exclude Exclusions) ([]string, error) {
 	var found []string
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -106,7 +120,7 @@ func expandDir(dir string, exclude []string) ([]string, error) {
 			}
 			return nil
 		}
-		if IsDockerfile(d.Name()) && !Excluded(rel, exclude) {
+		if IsDockerfile(d.Name()) && !exclude.excludes(rel) {
 			found = append(found, rel)
 		}
 		return nil
@@ -115,7 +129,7 @@ func expandDir(dir string, exclude []string) ([]string, error) {
 	return found, err
 }
 
-func expandPattern(pattern string, exclude []string) ([]string, error) {
+func expandPattern(pattern string, exclude Exclusions) ([]string, error) {
 	pattern = filepath.ToSlash(pattern)
 	if _, err := path.Match(strings.ReplaceAll(pattern, "**", "*"), ""); err != nil {
 		return nil, fmt.Errorf("%s: %w", pattern, err)
@@ -137,7 +151,7 @@ func expandPattern(pattern string, exclude []string) ([]string, error) {
 			}
 			return nil
 		}
-		if Match(pattern, rel) && !Excluded(rel, exclude) {
+		if Match(pattern, rel) && !exclude.excludes(rel) {
 			found = append(found, rel)
 		}
 		return nil
@@ -172,6 +186,40 @@ func patternRoot(pattern string) string {
 // Dockerfiles. Other hidden directories such as .devcontainer are searched.
 func skipDir(name string) bool {
 	return name == ".git" || name == "node_modules"
+}
+
+// Exclusions are exclude patterns and the directory they are written relative
+// to: the directory of the configuration file that declares them. Matching
+// against paths made relative to Base keeps a pattern such as "examples/**"
+// working when docker-lint runs from a subdirectory or is given absolute paths.
+type Exclusions struct {
+	Patterns []string
+	// Base is the directory patterns are relative to; "" means the current one.
+	Base string
+}
+
+func (e Exclusions) excludes(p string) bool {
+	if len(e.Patterns) == 0 {
+		return false
+	}
+	return Excluded(relativeTo(e.Base, p), e.Patterns)
+}
+
+// relativeTo returns p relative to base with forward slashes, or p unchanged
+// when it lies outside base.
+func relativeTo(base, p string) string {
+	if base == "" {
+		base = "."
+	}
+	absBase, errBase := filepath.Abs(base)
+	absPath, errPath := filepath.Abs(p)
+	if errBase == nil && errPath == nil {
+		rel, err := filepath.Rel(absBase, absPath)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(p)
 }
 
 // Excluded reports whether a slash-separated path matches any exclude pattern.
