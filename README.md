@@ -312,13 +312,16 @@ steps:
 |-------|---------|-------------|
 | `dockerfile` | `Dockerfile` | Files, directories or glob patterns to lint, one per line |
 | `config` | | Configuration file (default: `.docker-lint.yaml` at the repository root) |
-| `version` | `latest` | docker-lint release to install, e.g. `v0.1.0` |
+| `version` | action's tag | docker-lint release to install: by default the one matching the action's tag (`@v0.1.1` installs v0.1.1), or the latest release when the action is used from a branch. Also `latest` or a tag such as `v0.1.1` |
 | `format` | `github` | Log output: `github` (annotations), `text`, `json` or `sarif` |
 | `strict` | `false` | Fail on warnings, not only on errors |
 | `quiet` | `false` | Hide informational findings |
 | `ignore` | | Comma-separated rule IDs to ignore |
 | `sarif-file` | | Also write a SARIF report here (`docker-lint.sarif` when uploading) |
 | `upload-sarif` | `false` | Upload the SARIF report to GitHub code scanning |
+
+Pinning the action pins the linter: `@v0.1.1` installs docker-lint v0.1.1. When you pin the action to a commit
+SHA, also set `version` to the matching tag; otherwise the latest release is installed.
 
 The action fails the step with docker-lint's exit code and exposes it as the `exit-code` output. A SARIF
 report is still written and uploaded when the lint fails, and covers every Dockerfile that could be parsed;
