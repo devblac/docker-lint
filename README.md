@@ -197,7 +197,7 @@ docker-lint includes 18 built-in rules. Rule IDs use the `DKL` prefix and are gr
 |----|----------|------|-------------|
 | DKL201 | Warning | Package manager cache not cleaned | Clean package manager cache in the same RUN instruction to reduce image size. `apt-get dist-clean` and `--mount=type=cache` count as clean |
 | DKL202 | Info | Consecutive RUN instructions | Combine consecutive RUN instructions to reduce the number of layers |
-| DKL203 | Warning | Suboptimal layer ordering | Place instructions that change less frequently earlier to optimize layer caching |
+| DKL203 | Warning | Suboptimal layer ordering | Place instructions that change less frequently earlier to optimize layer caching, e.g. copy only the dependency manifests before `npm ci`, `pip install -r` or `go mod download`, not the whole build context |
 | DKL204 | Warning | Package update without install | Combine package update with install in the same RUN instruction to avoid cache issues |
 
 ### Security Rules
