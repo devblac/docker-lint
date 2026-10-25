@@ -73,7 +73,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&configPath, "config", "", "")
 	fs.StringVar(&configPath, "c", "", "")
 
-	if err := fs.Parse(args); err != nil {
+	paths, err := parseArgs(fs, args)
+	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			printUsage(stdout)
 			return ExitSuccess
@@ -141,7 +142,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		exclude.Base = filepath.Dir(cfgPath)
 	}
 
-	reports, single, fatal := lintInputs(fs.Args(), exclude, stdin, anlzr, stderr)
+	reports, single, fatal := lintInputs(paths, exclude, stdin, anlzr, stderr)
 
 	out := output{format: outputFormat, quiet: quiet, tool: toolInfo(cfg)}
 	if formatErr := out.write(reports, single, stdout); formatErr != nil {
@@ -157,6 +158,28 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		all = append(all, r.Findings...)
 	}
 	return determineExitCode(all, strict)
+}
+
+// parseArgs parses flags wherever they appear, so "docker-lint Dockerfile
+// --json" works like "docker-lint --json Dockerfile", and returns the
+// positional arguments in order. Everything after "--" is positional.
+func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			return positional, nil
+		}
+		// flag stops at "--" (consuming it) or at the first non-flag argument.
+		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+			return append(positional, rest...), nil
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
 }
 
 // loadConfig returns the configuration to use: the file named by --config,
@@ -185,6 +208,16 @@ func loadConfig(path string, disabled bool) (*config.Config, string, error) {
 // and skipped, and fatal is set; the other files are still linted. single is
 // true when the input is stdin or one file named directly.
 func lintInputs(paths []string, exclude files.Exclusions, stdin io.Reader, anlzr *analyzer.Analyzer, stderr io.Writer) (reports []formatter.Report, single, fatal bool) {
+	if len(paths) == 1 && paths[0] == "-" {
+		paths = nil
+	}
+	for _, p := range paths {
+		if p == "-" {
+			fmt.Fprintln(stderr, "Error: - (stdin) cannot be combined with other paths")
+			return nil, false, true
+		}
+	}
+
 	if len(paths) == 0 {
 		if stdin == nil {
 			stdin = os.Stdin
@@ -388,7 +421,7 @@ Usage:
 
 Each path is a Dockerfile, a directory searched recursively for Dockerfiles,
 or a glob pattern such as "services/**/Dockerfile". Reads from stdin when no
-path is given.
+path (or -) is given. Flags may come before or after the paths.
 
 Flags:
   -h, --help            Show this help message

@@ -63,7 +63,8 @@ backups and docs such as `Dockerfile.template`, `Dockerfile.j2` or `Dockerfile.b
 to lint). Patterns
 support `**` for any number of directories and are expanded by docker-lint itself, so quote them to make them
 work the same in every shell, including on Windows. A directory or pattern that matches no Dockerfile is a fatal
-error, so a CI job cannot pass without linting anything. With no path, docker-lint reads from stdin.
+error, so a CI job cannot pass without linting anything. With no path, or with `-`, docker-lint reads from stdin.
+Flags may come before or after the paths; use `--` before a path that starts with `-`.
 
 ### Flags
 
