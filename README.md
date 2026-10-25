@@ -9,8 +9,9 @@ A minimal, production-grade CLI tool for statically analyzing Dockerfiles to det
 - **Static Analysis**: Purely static analysis - never executes Docker builds
 - **Real Dockerfile Syntax**: Parsing is delegated to BuildKit, the parser `docker build` itself uses, so heredocs (`RUN <<EOT`), parser directives (`# syntax`, `# escape`), `RUN --mount` flags and line continuations are understood exactly as Docker understands them
 - **Single Binary**: Compiles to a single Go binary with no runtime dependencies
-- **CI/CD Ready**: Clear exit codes (0, 1, 2) and JSON output for pipeline integration
-- **Configurable**: Ignore specific rules via CLI flags or inline comments
+- **CI/CD Ready**: Clear exit codes (0, 1, 2); text, JSON, SARIF and GitHub annotation output; a GitHub Action
+- **Whole Repositories**: Lint every Dockerfile under a directory or matching a glob in one run
+- **Configurable**: A `.docker-lint.yaml` file, CLI flags or inline comments to ignore rules or change their severity
 - **Security Focused**: Detects secrets in ENV/ARG without exposing actual values
 - **Multi-stage Support**: Correctly analyzes multi-stage Dockerfiles with per-stage rule evaluation
 - **Comprehensive Rules**: 18 built-in rules covering Dockerfile structure, base images, layer optimization, security, and best practices
@@ -323,6 +324,12 @@ steps:
 | `ignore` | | Comma-separated rule IDs to ignore |
 | `sarif-file` | | Also write a SARIF report here (`docker-lint.sarif` when uploading) |
 | `upload-sarif` | `false` | Upload the SARIF report to GitHub code scanning |
+| `github-token` | `github.token` | Token used to download the docker-lint release |
+
+| Output | Description |
+|--------|-------------|
+| `exit-code` | docker-lint's exit code: `0` clean, `1` lint errors (or warnings with `strict`), `2` fatal error |
+| `sarif-file` | Path of the SARIF report, when one was written |
 
 Pinning the action pins the linter: `@v0.1.1` installs docker-lint v0.1.1. When you pin the action to a commit
 SHA, also set `version` to the matching tag; otherwise the latest release is installed.

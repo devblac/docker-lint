@@ -101,7 +101,8 @@ release, so nothing is public until a maintainer publishes it.
 1. Make sure `main` is green and `goreleaser release --snapshot --clean` builds locally
    (CI also runs it on every pull request).
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a new
-   empty `## [Unreleased]` above it, and merge that change to `main`.
+   empty `## [Unreleased]` above it, update the comparison links at the bottom, and
+   merge that change to `main`.
 3. Tag the merge commit and push the tag:
 
    ```bash
@@ -112,7 +113,10 @@ release, so nothing is public until a maintainer publishes it.
 4. The Release workflow runs the tests, takes the release notes from the version's
    `CHANGELOG.md` section (it fails if there is none) and uploads the binaries and
    `checksums.txt` to a draft release.
-5. Review the draft on the Releases page and publish it.
+5. Review the draft on the Releases page: check its notes, download an archive and
+   verify it against `checksums.txt`, then publish it. Avoid `go install ...@vX.Y.Z`
+   before publishing: the Go module proxy caches a tag's contents permanently, so the
+   tag can no longer be moved if the release needs fixing.
 
 ## Questions?
 
