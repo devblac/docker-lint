@@ -1,5 +1,5 @@
 name: docker-lint
-description: Lint Dockerfiles for inefficiencies, anti-patterns and security issues, with pull request annotations and SARIF for code scanning
+description: Lint Dockerfiles for anti-patterns, inefficiencies and security issues; annotates pull requests and outputs SARIF
 author: devblac
 branding:
   icon: check-square
