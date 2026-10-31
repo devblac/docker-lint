@@ -1,6 +1,7 @@
 4:1 warning DKL201 pip install without --no-cache-dir increases image size
 4:1 info DKL202 Found 6 consecutive RUN instructions that could be combined
 7:1 warning DKL201 apk add without --no-cache increases image size
+18:1 warning DKL203 COPY/ADD of the whole build context before installing dependencies reruns the install on every source change
 26:1 info DKL202 Found 2 consecutive RUN instructions that could be combined
 27:1 warning DKL201 pip install without --no-cache-dir increases image size
 32:1 info DKL404 No HEALTHCHECK instruction found

@@ -374,6 +374,33 @@ func TestIsPackageInstallCommand(t *testing.T) {
 		{"yarn install", true},
 		{"go mod download", true},
 		{"echo hello", false},
+		// Dependency installers beyond the original list.
+		{"npm ci", true},
+		{"npm i --omit=dev", true},
+		{"pnpm install --frozen-lockfile", true},
+		{"bun install", true},
+		{"yarn", true},
+		{"yarn --frozen-lockfile && yarn build", true},
+		{"python -m pip install -r requirements.txt", true},
+		{"uv sync --frozen", true},
+		{"poetry install --no-root", true},
+		{"pipenv install --deploy", true},
+		{"bundle install", true},
+		{"composer install --no-dev", true},
+		{"cargo fetch", true},
+		{"dotnet restore", true},
+		{"mvn -B dependency:go-offline", true},
+		{"apt install -y curl", true},
+		{"apt-get -y --no-install-recommends install curl", true},
+		{"microdnf install -y curl", true},
+		// Commands that build or run the project rather than install into it.
+		{"npm run build", false},
+		{"npm init -y", false},
+		{"yarn build", false},
+		{"go build ./...", false},
+		{"cargo build --release", false},
+		{"dotnet publish -c Release", false},
+		{"mvn package", false},
 	}
 
 	for _, tt := range tests {
@@ -564,5 +591,131 @@ func TestRunReferencesCopy(t *testing.T) {
 		if got := runReferencesCopy(tt.command, tt.sources); got != tt.want {
 			t.Errorf("runReferencesCopy(%q, %v) = %v, want %v", tt.command, tt.sources, got, tt.want)
 		}
+	}
+}
+
+// TestSuboptimalOrderingWholeContext verifies the classic anti-pattern, the
+// whole build context copied before the dependencies are installed, is caught
+// even when nothing else is copied after the install.
+func TestSuboptimalOrderingWholeContext(t *testing.T) {
+	rule := &SuboptimalOrderingRule{}
+
+	stage := func(instrs ...ast.Instruction) *ast.Dockerfile {
+		return &ast.Dockerfile{Stages: []ast.Stage{{Index: 0, Instructions: instrs}}}
+	}
+
+	tests := []struct {
+		name string
+		df   *ast.Dockerfile
+		want int
+	}{
+		{
+			name: "node: COPY . . then npm ci",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, Sources: []string{"."}, Dest: "."},
+				&ast.RunInstruction{LineNum: 2, Command: "npm ci"},
+				&ast.RunInstruction{LineNum: 3, Command: "npm run build"},
+			),
+			want: 1,
+		},
+		{
+			name: "python: COPY ./ /app/ then pip install -r",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, Sources: []string{"./"}, Dest: "/app/"},
+				&ast.RunInstruction{LineNum: 2, Command: "pip install --no-cache-dir -r requirements.txt"},
+			),
+			want: 1,
+		},
+		{
+			name: "go: ADD * ./ then go mod download",
+			df: stage(
+				&ast.AddInstruction{LineNum: 1, Sources: []string{"*"}, Dest: "./"},
+				&ast.RunInstruction{LineNum: 2, Command: "go mod download"},
+			),
+			want: 1,
+		},
+		{
+			name: "reported once across several installs",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, Sources: []string{"."}, Dest: "."},
+				&ast.RunInstruction{LineNum: 2, Command: "apt-get install -y make"},
+				&ast.RunInstruction{LineNum: 3, Command: "npm ci"},
+			),
+			want: 1,
+		},
+		{
+			name: "manifests first, then the whole context after the install",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, Sources: []string{"package.json", "package-lock.json"}, Dest: "./"},
+				&ast.RunInstruction{LineNum: 2, Command: "npm ci"},
+				&ast.CopyInstruction{LineNum: 3, Sources: []string{"."}, Dest: "."},
+				&ast.RunInstruction{LineNum: 4, Command: "npm run build"},
+			),
+			want: 0,
+		},
+		{
+			name: "whole context before a build step only",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, Sources: []string{"."}, Dest: "."},
+				&ast.RunInstruction{LineNum: 2, Command: "go build -o /app ./cmd/app"},
+			),
+			want: 0,
+		},
+		{
+			name: "a single specific file before an install is not reported",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, Sources: []string{"nginx.conf"}, Dest: "/etc/nginx/"},
+				&ast.RunInstruction{LineNum: 2, Command: "apk add --no-cache curl"},
+			),
+			want: 0,
+		},
+		{
+			name: "COPY --from is not the build context",
+			df: stage(
+				&ast.CopyInstruction{LineNum: 1, From: "builder", Sources: []string{"."}, Dest: "."},
+				&ast.RunInstruction{LineNum: 2, Command: "npm ci"},
+			),
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rule.Check(tt.df); len(got) != tt.want {
+				t.Errorf("got %d findings, want %d: %+v", len(got), tt.want, got)
+			}
+		})
+	}
+}
+
+// TestCacheNotCleanedPipEnv verifies PIP_NO_CACHE_DIR in the environment
+// counts as --no-cache-dir, within its own stage only.
+func TestCacheNotCleanedPipEnv(t *testing.T) {
+	rule := &CacheNotCleanedRule{}
+	from := func(line int) *ast.FromInstruction {
+		return &ast.FromInstruction{LineNum: line, Image: "python", Tag: "3.12-slim"}
+	}
+	pip := func(line int, cmd string) *ast.RunInstruction {
+		return &ast.RunInstruction{LineNum: line, Command: cmd}
+	}
+
+	tests := []struct {
+		name   string
+		instrs []ast.Instruction
+		want   int
+	}{
+		{"ENV disables the cache", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: "1"}, pip(3, "pip install flask")}, 0},
+		{"any non-empty value counts, as in pip", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: "off"}, pip(3, "pip install flask")}, 0},
+		{"empty value does not", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: ""}, pip(3, "pip install flask")}, 1},
+		{"set for the command", []ast.Instruction{from(1), pip(2, "PIP_NO_CACHE_DIR=1 pip install flask")}, 0},
+		{"ENV of an earlier stage does not carry over", []ast.Instruction{from(1), &ast.EnvInstruction{LineNum: 2, Key: "PIP_NO_CACHE_DIR", Value: "1"}, from(3), pip(4, "pip install flask")}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			df := &ast.Dockerfile{Instructions: tt.instrs}
+			if got := rule.Check(df); len(got) != tt.want {
+				t.Errorf("got %d findings, want %d", len(got), tt.want)
+			}
+		})
 	}
 }

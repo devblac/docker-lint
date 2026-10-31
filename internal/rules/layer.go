@@ -33,6 +33,9 @@ var (
 	// pipNoCachePattern matches pip install --no-cache-dir
 	pipNoCachePattern = regexp.MustCompile(`pip[3]?\s+install\s+[^\n]*--no-cache-dir`)
 
+	// pipNoCacheEnvPattern matches PIP_NO_CACHE_DIR set for the command itself
+	pipNoCacheEnvPattern = regexp.MustCompile(`\bPIP_NO_CACHE_DIR=\S`)
+
 	// Package update patterns (without install in same command)
 	aptGetUpdatePattern = regexp.MustCompile(`apt-get\s+update`)
 	yumUpdatePattern    = regexp.MustCompile(`(yum|dnf)\s+(update|upgrade)`)
@@ -52,7 +55,21 @@ func (r *CacheNotCleanedRule) Description() string {
 func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 	var findings []ast.Finding
 
+	// pipNoCacheEnv is set while the current stage has PIP_NO_CACHE_DIR in its
+	// environment. pip disables its cache for any non-empty value, even
+	// "false", for backward compatibility.
+	pipNoCacheEnv := false
+
 	for _, instr := range dockerfile.Instructions {
+		switch v := instr.(type) {
+		case *ast.FromInstruction:
+			pipNoCacheEnv = false
+		case *ast.EnvInstruction:
+			if v.Key == "PIP_NO_CACHE_DIR" {
+				pipNoCacheEnv = v.Value != ""
+			}
+		}
+
 		run, ok := instr.(*ast.RunInstruction)
 		if !ok {
 			continue
@@ -106,7 +123,8 @@ func (r *CacheNotCleanedRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 		}
 
 		// Check pip install without --no-cache-dir
-		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) && !hasPipCacheMount(run) {
+		if pipInstallPattern.MatchString(cmd) && !pipNoCachePattern.MatchString(cmd) && !hasPipCacheMount(run) &&
+			!pipNoCacheEnv && !pipNoCacheEnvPattern.MatchString(cmd) {
 			findings = append(findings, ast.Finding{
 				RuleID:     r.ID(),
 				Severity:   r.Severity(),
@@ -250,18 +268,17 @@ func (r *SuboptimalOrderingRule) Check(dockerfile *ast.Dockerfile) []ast.Finding
 func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 	var findings []ast.Finding
 
-	// Track COPY/ADD instructions and their sources
 	type copyInfo struct {
 		instr   ast.Instruction
 		sources []string
 	}
 	var copies []copyInfo
+	flagged := make(map[int]bool) // line of each COPY/ADD already reported
 
-	// Track if we've seen a RUN that installs packages (likely doesn't depend on copied files)
 	for i, instr := range stage.Instructions {
 		switch v := instr.(type) {
 		case *ast.CopyInstruction:
-			// Skip COPY --from (multi-stage copies)
+			// COPY --from takes files from another stage, not the build context.
 			if v.From != "" {
 				continue
 			}
@@ -271,47 +288,80 @@ func (r *SuboptimalOrderingRule) checkStage(stage ast.Stage) []ast.Finding {
 			copies = append(copies, copyInfo{instr: v, sources: v.Sources})
 
 		case *ast.RunInstruction:
-			// Check if this RUN is a package install that likely doesn't depend on copied files
-			if isPackageInstallCommand(v.Command) && len(copies) > 0 {
-				// Look ahead to see if there are more COPY/ADD after this RUN
-				hasMoreCopies := false
-				for j := i + 1; j < len(stage.Instructions); j++ {
-					switch stage.Instructions[j].(type) {
-					case *ast.CopyInstruction, *ast.AddInstruction:
-						hasMoreCopies = true
-						break
-					}
+			if len(copies) == 0 || !isPackageInstallCommand(v.Command) {
+				continue
+			}
+			moreCopiesLater := hasCopyAfter(stage.Instructions[i+1:])
+
+			for _, cp := range copies {
+				if flagged[cp.instr.Line()] {
+					continue
+				}
+				// Copying only dependency manifests before the install step is
+				// the recommended caching pattern.
+				if isDependencyManifestCopy(cp.sources) {
+					continue
+				}
+				// The RUN uses what this COPY brought in (a script, a config
+				// file), so the COPY has to stay before it.
+				if runReferencesCopy(v.Command, cp.sources) {
+					continue
 				}
 
-				// If there are copies before package install and more copies after,
-				// the early copies might be suboptimal
-				if hasMoreCopies {
-					for _, cp := range copies {
-						// Copying only dependency manifests before the install
-						// step is the recommended caching pattern.
-						if isDependencyManifestCopy(cp.sources) {
-							continue
-						}
-						// The RUN uses what this COPY brought in (a script, a
-						// config file), so the COPY has to stay before it.
-						if runReferencesCopy(v.Command, cp.sources) {
-							continue
-						}
-						findings = append(findings, ast.Finding{
-							RuleID:     r.ID(),
-							Severity:   r.Severity(),
-							Line:       cp.instr.Line(),
-							Column:     1,
-							Message:    "COPY/ADD before package installation may reduce cache efficiency",
-							Suggestion: "Move COPY/ADD after RUN instructions that don't depend on copied files",
-						})
-					}
+				switch {
+				case copiesWholeContext(cp.sources):
+					// Any source change invalidates the install layer: the
+					// classic "COPY . ." before "npm ci".
+					flagged[cp.instr.Line()] = true
+					findings = append(findings, ast.Finding{
+						RuleID:     r.ID(),
+						Severity:   r.Severity(),
+						Line:       cp.instr.Line(),
+						Column:     1,
+						Message:    "COPY/ADD of the whole build context before installing dependencies reruns the install on every source change",
+						Suggestion: "Copy only the dependency manifests first (e.g. package.json and its lock file), install, then copy the rest",
+					})
+				case moreCopiesLater:
+					// Files copied early while others are copied after the
+					// install would be better copied after it too.
+					flagged[cp.instr.Line()] = true
+					findings = append(findings, ast.Finding{
+						RuleID:     r.ID(),
+						Severity:   r.Severity(),
+						Line:       cp.instr.Line(),
+						Column:     1,
+						Message:    "COPY/ADD before package installation may reduce cache efficiency",
+						Suggestion: "Move COPY/ADD after RUN instructions that don't depend on copied files",
+					})
 				}
 			}
 		}
 	}
 
 	return findings
+}
+
+// hasCopyAfter reports whether any of the instructions is a COPY or ADD.
+func hasCopyAfter(instructions []ast.Instruction) bool {
+	for _, instr := range instructions {
+		switch instr.(type) {
+		case *ast.CopyInstruction, *ast.AddInstruction:
+			return true
+		}
+	}
+	return false
+}
+
+// copiesWholeContext reports whether a COPY/ADD brings in the entire build
+// context, as "COPY . ." or "COPY * ./" do.
+func copiesWholeContext(sources []string) bool {
+	for _, source := range sources {
+		switch strings.TrimSuffix(strings.TrimPrefix(source, "./"), "/") {
+		case "", ".", "*":
+			return true
+		}
+	}
+	return false
 }
 
 // runReferencesCopy reports whether a command mentions a file brought in by a
@@ -330,15 +380,24 @@ func runReferencesCopy(command string, sources []string) bool {
 	return false
 }
 
-// isPackageInstallCommand checks if a command is a package manager install
+// dependencyInstallPattern matches commands that install system packages or a
+// project's dependencies: the steps worth caching ahead of the source code.
+var dependencyInstallPattern = regexp.MustCompile(`(?m)` +
+	// System package managers.
+	`\b(apt-get|apt|yum|dnf|microdnf|zypper)\s+(-\S+\s+)*install\b|\bapk\s+(-\S+\s+)*(add|update)\b` +
+	// Python.
+	`|\bpip3?\s+install\b|\bpython3?\s+-m\s+pip\s+install\b|\buv\s+(sync|pip\s+install)\b` +
+	`|\bpoetry\s+install\b|\bpipenv\s+(install|sync)\b|\bconda\s+(install|env\s+(create|update))\b` +
+	// JavaScript.
+	`|\b(npm|pnpm|bun)\s+(install|ci|i)\b|\byarn(\s+install)?(\s+--\S+)*\s*($|&&|;|\|)` +
+	// Go, Ruby, PHP, Rust, .NET, JVM, Elixir.
+	`|\bgo\s+mod\s+download\b|\bbundle\s+install\b|\bcomposer\s+install\b|\bcargo\s+fetch\b` +
+	`|\bdotnet\s+restore\b|\bmvn\b[^\n]*\bdependency:(go-offline|resolve)\b|\bmix\s+deps\.get\b`)
+
+// isPackageInstallCommand reports whether a RUN command installs system
+// packages or project dependencies.
 func isPackageInstallCommand(cmd string) bool {
-	return aptGetInstallPattern.MatchString(cmd) ||
-		yumInstallPattern.MatchString(cmd) ||
-		apkAddPattern.MatchString(cmd) ||
-		pipInstallPattern.MatchString(cmd) ||
-		strings.Contains(cmd, "npm install") ||
-		strings.Contains(cmd, "yarn install") ||
-		strings.Contains(cmd, "go mod download")
+	return dependencyInstallPattern.MatchString(cmd)
 }
 
 // packageFiles are dependency manifests and lock files, lower-cased.

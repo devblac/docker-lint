@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-24
+## [0.1.1] - 2026-10-24
 
-First release. The Changed, Removed and Fixed sections describe differences from
-the unreleased code on `main` before this version, for anyone who built it from
-source.
+First published release. The Changed, Removed and Fixed sections describe
+differences from the code on `main` before it, for anyone who built it from
+source. Version 0.1.0 was tagged but never published.
 
 ### Added
 - Dockerfile parser with multi-stage build support
@@ -53,7 +53,13 @@ source.
 - The GitHub Action lints several paths or patterns (one per line) and takes a
   `config` input
 - `--version` falls back to the version Go records in the binary, so builds from
-  `go install github.com/devblac/docker-lint/cmd/docker-lint@v0.1.0` report it
+  `go install github.com/devblac/docker-lint/cmd/docker-lint@v0.1.1` report it
+- Flags may follow the paths (`docker-lint Dockerfile --json`), `--` ends the
+  flags, and `-` reads stdin
+- The GitHub Action installs the docker-lint release matching the tag it is used
+  at (`@v0.1.1` installs v0.1.1), so pinning the action pins the linter
+- Tests that every rule reports a real-world example of its problem, alongside
+  the corpus that guards against false positives
 
 ### Changed
 - **Breaking:** rule IDs move from `DLxxxx`, which collide with hadolint's IDs for
@@ -79,6 +85,12 @@ source.
 - DKL404 (missing HEALTHCHECK) and DKL202 (consecutive RUN) are now `info`: on the
   corpus they fired on 51 and 39 of 52 files, and Kubernetes ignores HEALTHCHECK
 - DKL103 judges only the base of the final image
+- DKL203 reports the whole build context copied before installing dependencies
+  (`COPY . .` then `npm ci`, `pip install -r` or `go mod download`), and
+  recognises many more installers (npm ci, pnpm, bun, yarn, uv, poetry, pipenv,
+  bundle, composer, cargo fetch, dotnet restore, mvn dependency:go-offline)
+- Directory searches skip Dockerfile templates, backups and docs
+  (`Dockerfile.template`, `.j2`, `.bak`, `.md`); name such a file to lint it
 
 ### Removed
 - Hand-written Dockerfile lexer (`internal/parser/lexer.go`), superseded by BuildKit
@@ -106,6 +118,18 @@ source.
 - DKL203 flagged the recommended pattern of copying dependency manifests first
   (`COPY go.mod go.sum ./`, `COPY package*.json ./`) because it inspected the
   destination instead of the sources
+- DKL304 flagged `ADD --checksum=...`, which Docker recommends for remote files,
+  and `ADD` of a Git repository; DKL305 said COPY could replace `ADD git@...`
+- DKL201 ignored `PIP_NO_CACHE_DIR` set with ENV or for the command
+- `exclude` patterns are relative to the configuration file, so they also apply
+  when docker-lint runs from a subdirectory or is given absolute paths
 
-[Unreleased]: https://github.com/devblac/docker-lint/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/devblac/docker-lint/releases/tag/v0.1.0
+## [0.1.0] - 2026-10-24
+
+Tagged but never published. A review of the draft release found the problems
+fixed in 0.1.1, and the tag could not be moved because the Go module proxy had
+already cached it. Use 0.1.1 instead.
+
+[Unreleased]: https://github.com/devblac/docker-lint/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/devblac/docker-lint/releases/tag/v0.1.1
+[0.1.0]: https://github.com/devblac/docker-lint/tree/v0.1.0

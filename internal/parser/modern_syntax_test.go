@@ -350,3 +350,59 @@ func TestParseInlineIgnoreAcrossBlankLines(t *testing.T) {
 		t.Errorf("InlineIgnores[5] = %v, want [DKL102]", rules)
 	}
 }
+
+func TestParseAddChecksum(t *testing.T) {
+	df, err := ParseString("FROM alpine:3.20\nADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://example.com/a.tar.gz /a\n")
+	if err != nil {
+		t.Fatalf("ParseString() error = %v", err)
+	}
+	add, ok := df.Instructions[1].(*ast.AddInstruction)
+	if !ok {
+		t.Fatalf("instruction 1 = %T, want *ast.AddInstruction", df.Instructions[1])
+	}
+	if want := "sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d"; add.Checksum != want {
+		t.Errorf("Checksum = %q, want %q", add.Checksum, want)
+	}
+}
+
+// TestParseCRLFLineEndings verifies a Dockerfile with Windows line endings,
+// as Git for Windows checks files out by default, parses like its LF version:
+// continuations join, inline ignores attach, and no stray \r is left behind.
+func TestParseCRLFLineEndings(t *testing.T) {
+	src := "FROM alpine:3.20\r\n" +
+		"# docker-lint ignore: DKL201\r\n" +
+		"RUN apt-get update && \\\r\n" +
+		"    apt-get install -y curl\r\n" +
+		"ENV A=1 \\\r\n" +
+		"    B=2\r\n" +
+		"RUN <<EOF\r\n" +
+		"echo hi\r\n" +
+		"EOF\r\n"
+
+	df, err := ParseString(src)
+	if err != nil {
+		t.Fatalf("ParseString() error = %v", err)
+	}
+
+	run := findRun(t, df, 0)
+	if run.Line() != 3 || !strings.Contains(run.Command, "apt-get install -y curl") || strings.Contains(run.Command, "\r") {
+		t.Errorf("first RUN = line %d %q, want line 3 with both commands and no \\r", run.Line(), run.Command)
+	}
+	if got := df.InlineIgnores[3]; len(got) != 1 || got[0] != "DKL201" {
+		t.Errorf("InlineIgnores[3] = %q, want [DKL201]", got)
+	}
+
+	var env []string
+	for _, instr := range df.Instructions {
+		if e, ok := instr.(*ast.EnvInstruction); ok {
+			env = append(env, e.Key+"="+e.Value)
+		}
+	}
+	if strings.Join(env, " ") != "A=1 B=2" {
+		t.Errorf("ENV = %q, want [A=1 B=2]", env)
+	}
+
+	if heredoc := findRun(t, df, 1); !strings.Contains(heredoc.Command, "echo hi") {
+		t.Errorf("heredoc RUN = %q, want its body", heredoc.Command)
+	}
+}

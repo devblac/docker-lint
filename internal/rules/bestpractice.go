@@ -260,12 +260,15 @@ func (r *WildcardCopyRule) Check(dockerfile *ast.Dockerfile) []ast.Finding {
 }
 
 // hasWildcard checks if any source path contains wildcard characters.
+// A wildcard that selects only dependency manifests ("package*.json",
+// "*.csproj") is the recommended way to copy them before installing, so it
+// does not count.
 func hasWildcard(sources []string) bool {
 	for _, source := range sources {
 		// Get just the filename part for checking
 		base := filepath.Base(source)
 		for _, wc := range wildcardChars {
-			if strings.Contains(base, wc) {
+			if strings.Contains(base, wc) && !isPackageFile(source) {
 				return true
 			}
 		}

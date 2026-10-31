@@ -286,3 +286,60 @@ func TestConfigUnknownRuleWarns(t *testing.T) {
 		}
 	}
 }
+
+// TestFlagsAfterPaths verifies flags are accepted after the paths, the way
+// most command-line tools allow.
+func TestFlagsAfterPaths(t *testing.T) {
+	path := createTempDockerfile(t, warningDockerfile)
+
+	tests := []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{path, "--json"}, ExitSuccess, `"rule_id": "DKL101"`},
+		{[]string{path, "-f", "github", "--strict"}, ExitLintErrors, "::warning file="},
+		{[]string{"-q", path, "--ignore", "DKL101"}, ExitSuccess, ""},
+	}
+	for _, tt := range tests {
+		var stdout, stderr bytes.Buffer
+		code := run(tt.args, nil, &stdout, &stderr)
+		if code != tt.code {
+			t.Errorf("%v: exit code %d, want %d; stderr: %s", tt.args, code, tt.code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), tt.want) {
+			t.Errorf("%v: output missing %q:\n%s", tt.args, tt.want, stdout.String())
+		}
+		if tt.want == "" && strings.Contains(stdout.String(), "DKL101") {
+			t.Errorf("%v: --ignore after the path was not applied:\n%s", tt.args, stdout.String())
+		}
+	}
+}
+
+// TestDoubleDashEndsFlags verifies a path that looks like a flag can follow "--".
+func TestDoubleDashEndsFlags(t *testing.T) {
+	dir := writeTree(t, map[string]string{"--json": cleanDockerfile})
+	chdir(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-q", "--", "--json"}, nil, &stdout, &stderr); code != ExitSuccess {
+		t.Errorf("exit code %d; stderr: %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), `"file"`) {
+		t.Errorf("--json after -- should be a path, not a flag:\n%s", stdout.String())
+	}
+}
+
+func TestDashReadsStdin(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"-", "--json"}, strings.NewReader(warningDockerfile), &stdout, &stderr)
+	if code != ExitSuccess || !strings.Contains(stdout.String(), `"file": "stdin"`) {
+		t.Errorf("exit code %d, output:\n%s\nstderr: %s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	path := createTempDockerfile(t, cleanDockerfile)
+	if code := run([]string{"-", path}, strings.NewReader(cleanDockerfile), &stdout, &stderr); code != ExitFatal {
+		t.Errorf("- with another path: exit code %d, want %d", code, ExitFatal)
+	}
+}

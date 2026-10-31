@@ -18,6 +18,16 @@ func TestIsDockerfile(t *testing.T) {
 		"api.dockerfile":          true,
 		"Containerfile.dev":       true,
 		"Dockerfile.dockerignore": false,
+		"Dockerfile.template":     false,
+		"Dockerfile.tmpl":         false,
+		"Dockerfile.j2":           false,
+		"api.Dockerfile.in":       false,
+		"Dockerfile.bak":          false,
+		"Dockerfile.orig":         false,
+		"Dockerfile.md":           false,
+		"Dockerfile.main":         true, // ends in "in", not ".in"
+		"Dockerfile.gold":         true, // ends in "old", not ".old"
+		"Dockerfile.alpine":       true,
 		".dockerignore":           false,
 		"Dockerfiles":             false,
 		"MyDockerfile":            false,
@@ -111,6 +121,7 @@ func TestExpand(t *testing.T) {
 		"services/api/Dockerfile",
 		"services/api/Dockerfile.dockerignore",
 		"services/web/web.Dockerfile",
+		"services/web/Dockerfile.template",
 		"services/web/node_modules/pkg/Dockerfile",
 		".devcontainer/Dockerfile",
 		".git/Dockerfile",
@@ -148,7 +159,13 @@ func TestExpand(t *testing.T) {
 		{
 			name: "pattern below a fixed directory",
 			args: []string{"services/*/*"},
-			want: []string{"services/api/Dockerfile", "services/api/Dockerfile.dockerignore", "services/web/web.Dockerfile"},
+			// An explicit pattern selects files by name only.
+			want: []string{"services/api/Dockerfile", "services/api/Dockerfile.dockerignore", "services/web/Dockerfile.template", "services/web/web.Dockerfile"},
+		},
+		{
+			name: "explicit template is linted",
+			args: []string{"services/web/Dockerfile.template"},
+			want: []string{"services/web/Dockerfile.template"},
 		},
 		{
 			name:    "explicit file is linted whatever its name and excludes",
@@ -164,7 +181,7 @@ func TestExpand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Expand(tt.args, tt.exclude)
+			got, err := Expand(tt.args, Exclusions{Patterns: tt.exclude})
 			if err != nil {
 				t.Fatalf("Expand() error = %v", err)
 			}
@@ -189,9 +206,55 @@ func TestExpandErrors(t *testing.T) {
 		{[]string{"Dockerfile", "[bad"}, "syntax error"},
 	}
 	for _, tt := range tests {
-		_, err := Expand(tt.args, nil)
+		_, err := Expand(tt.args, Exclusions{})
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("Expand(%q) error = %v, want it to mention %q", tt.args, err, tt.want)
 		}
+	}
+}
+
+// TestExclusionsAreRelativeToBase verifies exclude patterns apply to paths
+// relative to the configuration's directory, however the paths were given.
+func TestExclusionsAreRelativeToBase(t *testing.T) {
+	makeTree(t,
+		"vendor/repo/examples/demo/Dockerfile",
+		"vendor/repo/services/api/Dockerfile",
+	)
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(root, "vendor", "repo")
+	exclude := Exclusions{Patterns: []string{"examples/**", "node_modules"}, Base: repo}
+	want := []string{"services/api/Dockerfile"}
+
+	// From the repository root, from a subdirectory and with an absolute path.
+	for _, tt := range []struct {
+		dir, arg string
+	}{
+		{repo, "."},
+		{filepath.Join(repo, "services"), ".."},
+		{root, repo},
+	} {
+		if err := os.Chdir(tt.dir); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Expand([]string{tt.arg}, exclude)
+		if err != nil {
+			t.Fatalf("Expand(%q) from %s: %v", tt.arg, tt.dir, err)
+		}
+		if len(got) != 1 || !strings.HasSuffix(got[0], want[0]) {
+			t.Errorf("Expand(%q) from %s = %q, want only .../%s", tt.arg, tt.dir, got, want[0])
+		}
+	}
+
+	// A directory above the base named like a pattern ("vendor") excludes
+	// nothing: only the part of the path below the base is matched.
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Expand([]string{"."}, Exclusions{Patterns: []string{"vendor"}, Base: repo})
+	if err != nil || len(got) != 2 {
+		t.Errorf("Expand() = %q, %v; want both Dockerfiles", got, err)
 	}
 }
