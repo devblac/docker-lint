@@ -60,6 +60,11 @@ source. Version 0.1.0 was tagged but never published.
   at (`@v0.1.1` installs v0.1.1), so pinning the action pins the linter
 - Tests that every rule reports a real-world example of its problem, alongside
   the corpus that guards against false positives
+- Container image `ghcr.io/devblac/docker-lint` for linux/amd64 and linux/arm64,
+  a static binary on distroless running as a non-root user, published when a
+  release is published
+- pre-commit hooks: `docker-lint` (built with Go) and `docker-lint-docker` (runs
+  the container image)
 
 ### Changed
 - **Breaking:** rule IDs move from `DLxxxx`, which collide with hadolint's IDs for

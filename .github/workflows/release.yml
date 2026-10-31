@@ -27,6 +27,16 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      # The docker-lint-docker pre-commit hook names the image by version, so a
+      # release must ship a hook that points at its own image.
+      - name: Check the pre-commit hook uses this version's image
+        run: |
+          image="ghcr.io/devblac/docker-lint:${GITHUB_REF_NAME#v}"
+          if ! grep -q "entry: $image\$" .pre-commit-hooks.yaml; then
+            echo "::error file=.pre-commit-hooks.yaml::the docker-lint-docker hook must use $image"
+            exit 1
+          fi
+
       - name: Extract release notes from CHANGELOG.md
         run: sh scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/release-notes.md"
 
