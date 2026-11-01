@@ -101,8 +101,10 @@ release, so nothing is public until a maintainer publishes it.
 1. Make sure `main` is green and `goreleaser release --snapshot --clean` builds locally
    (CI also runs it on every pull request).
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a new
-   empty `## [Unreleased]` above it, update the comparison links at the bottom, and
-   merge that change to `main`.
+   empty `## [Unreleased]` above it, update the comparison links at the bottom, point
+   the `docker-lint-docker` hook in `.pre-commit-hooks.yaml` and the version examples
+   in `README.md` at the new version, and merge that change to `main`. The Release
+   workflow fails if the hook names another version's image.
 3. Tag the merge commit and push the tag:
 
    ```bash
@@ -117,6 +119,9 @@ release, so nothing is public until a maintainer publishes it.
    verify it against `checksums.txt`, then publish it. Avoid `go install ...@vX.Y.Z`
    before publishing: the Go module proxy caches a tag's contents permanently, so the
    tag can no longer be moved if the release needs fixing.
+6. Publishing the release runs the Image workflow, which pushes
+   `ghcr.io/devblac/docker-lint` for linux/amd64 and linux/arm64. The first time,
+   make the package public in its settings on GitHub; packages start out private.
 
 ## Questions?
 

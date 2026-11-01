@@ -36,6 +36,33 @@ sudo mv docker-lint /usr/local/bin/
 Archives are named `docker-lint_<version>_<os>_<arch>`, with `.zip` for Windows and
 `.tar.gz` elsewhere.
 
+### Docker
+
+A 2.5 MB image (static binary on distroless, running as a non-root user) for linux/amd64 and linux/arm64:
+
+```bash
+# Lint from standard input
+docker run --rm -i ghcr.io/devblac/docker-lint:0.1.1 < Dockerfile
+
+# Lint every Dockerfile in the current directory
+docker run --rm -v "$PWD:/work" ghcr.io/devblac/docker-lint:0.1.1 .
+```
+
+### pre-commit
+
+Add to `.pre-commit-config.yaml` to lint staged Dockerfiles before each commit:
+
+```yaml
+repos:
+  - repo: https://github.com/devblac/docker-lint
+    rev: v0.1.1
+    hooks:
+      - id: docker-lint          # builds docker-lint with Go
+      # - id: docker-lint-docker # or runs the container image (needs Docker, not Go)
+```
+
+Both hooks read the project's `.docker-lint.yaml` and skip Dockerfile templates.
+
 ### From Source
 
 Requires Go 1.22 or later (as specified in `go.mod`).
@@ -377,8 +404,8 @@ go test ./...
 # Build
 go build -o docker-lint ./cmd/docker-lint
 
-# Run linter on itself
-./docker-lint testdata/valid/minimal.Dockerfile
+# Run linter on itself (the repository's own Dockerfile builds the image)
+./docker-lint Dockerfile
 ```
 
 ## License
