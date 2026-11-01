@@ -20,10 +20,11 @@ inputs:
   version:
     description: >-
       docker-lint release to use. By default, the release matching the tag the
-      action is used at (uses: devblac/docker-lint@v1.2.3 installs v1.2.3), or
-      the latest release when the action is used from a branch or commit. Also
-      accepts "latest", a tag such as "v0.1.1", or "source" to build the
-      action's own checkout (needs Go; used to test the action).
+      action is used at (uses: devblac/docker-lint@v1.2.3 installs v1.2.3, and
+      @v1 the newest v1.x.y), or the latest release when the action is used
+      from a branch or commit. Also accepts "latest", a tag such as "v0.1.1", a
+      line such as "v0" or "v0.1", or "source" to build the action's own
+      checkout (needs Go; used to test the action).
     default: ""
   format:
     description: >-
@@ -95,12 +96,16 @@ runs:
         mkdir -p "$bin_dir"
 
         # Pinning the action pins the linter: by default, install the release
-        # whose tag the action is used at. The runner checks the action out
-        # under .../_actions/<owner>/<repo>/<ref>, which also gives the ref when
-        # github.action_ref is empty, as it is in some nested composite actions.
+        # whose tag the action is used at. A major or minor tag (v1, v1.2)
+        # installs the newest release in that line. The runner checks the action
+        # out under .../_actions/<owner>/<repo>/<ref>, which also gives the ref
+        # when github.action_ref is empty, as it is in some nested composite
+        # actions.
+        semver='^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'
+        line='^v[0-9]+(\.[0-9]+)?$'
         if [ -z "$VERSION" ]; then
           ref="${ACTION_REF:-$(basename "$ACTION_PATH")}"
-          if printf '%s' "$ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+          if printf '%s' "$ref" | grep -Eq "$semver|$line"; then
             VERSION="$ref"
           else
             VERSION=latest
@@ -115,6 +120,17 @@ runs:
           tag="$VERSION"
           if [ "$tag" = latest ]; then
             tag="$(gh release view --repo "$repo" --json tagName --jq .tagName)"
+          elif printf '%s' "$tag" | grep -Eq "$line"; then
+            # The prefix passed the check above, so it is safe inside the filter.
+            tag="$(gh release list --repo "$repo" --exclude-drafts --exclude-pre-releases \
+              --limit 1000 --json tagName --jq "[.[].tagName | select(startswith(\"$tag.\"))
+                | select(test(\"^v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\$\"))]
+                | sort_by(ltrimstr(\"v\") | split(\".\") | map(tonumber)) | last // empty")"
+            if [ -z "$tag" ]; then
+              echo "::error::docker-lint: no published release matches $VERSION"
+              exit 1
+            fi
+            echo "docker-lint: $VERSION resolves to $tag"
           fi
           ext=tar.gz
           if [ "$os" = windows ]; then ext=zip; fi

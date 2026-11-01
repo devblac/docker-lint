@@ -344,7 +344,7 @@ steps:
 |-------|---------|-------------|
 | `dockerfile` | `Dockerfile` | Files, directories or glob patterns to lint, one per line |
 | `config` | | Configuration file (default: `.docker-lint.yaml` at the repository root) |
-| `version` | action's tag | docker-lint release to install: by default the one matching the action's tag (`@v0.1.1` installs v0.1.1), or the latest release when the action is used from a branch. Also `latest` or a tag such as `v0.1.1` |
+| `version` | action's tag | docker-lint release to install: by default the one matching the action's tag (`@v0.1.1` installs v0.1.1, `@v0` the newest v0.x.y), or the latest release when the action is used from a branch. Also `latest`, a tag such as `v0.1.1` or a line such as `v0` |
 | `format` | `github` | Log output: `github` (annotations), `text`, `json` or `sarif` |
 | `strict` | `false` | Fail on warnings, not only on errors |
 | `quiet` | `false` | Hide informational findings |
@@ -358,8 +358,11 @@ steps:
 | `exit-code` | docker-lint's exit code: `0` clean, `1` lint errors (or warnings with `strict`), `2` fatal error |
 | `sarif-file` | Path of the SARIF report, when one was written |
 
-Pinning the action pins the linter: `@v0.1.1` installs docker-lint v0.1.1. When you pin the action to a commit
-SHA, also set `version` to the matching tag; otherwise the latest release is installed.
+Pinning the action pins the linter: `@v0.1.1` installs docker-lint v0.1.1. To get fixes and new rules
+without editing the workflow, use `@v0` (or `@v0.1` for fixes only): these tags follow the newest release in
+their line, and the action installs that release. Bear in mind that a new rule can fail a build that passed
+before. When you pin the action to a commit SHA, also set `version` to the matching tag; otherwise the latest
+release is installed.
 
 The action fails the step with docker-lint's exit code and exposes it as the `exit-code` output. A SARIF
 report is still written and uploaded when the lint fails, and covers every Dockerfile that could be parsed;
