@@ -4,7 +4,9 @@ name: Release
 # The result is a draft GitHub release; publish it by hand after review.
 on:
   push:
-    tags: ["v*"]
+    # Only version tags; the moving major and minor tags (v1, v1.2) are not
+    # releases.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
 
 permissions:
   contents: write

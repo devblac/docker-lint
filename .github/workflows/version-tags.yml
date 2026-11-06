@@ -1,0 +1,49 @@
+name: Version tags
+
+# Keeps the major and minor tags (v1, v1.2) on the newest published release in
+# their line, so "uses: devblac/docker-lint@v1" gets every compatible update.
+# Publishing a patch for an older line leaves the newer lines' tags alone.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  tags:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Move the major and minor tags
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "$TAG is not a vX.Y.Z release; leaving the version tags alone"
+            exit 0
+          fi
+
+          minor="${TAG%.*}"
+          major="${minor%.*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for line in "$major" "$minor"; do
+            newest="$(gh release list --exclude-drafts --exclude-pre-releases \
+              --limit 1000 --json tagName --jq "[.[].tagName | select(startswith(\"$line.\"))
+                | select(test(\"^v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\$\"))]
+                | sort_by(ltrimstr(\"v\") | split(\".\") | map(tonumber)) | last // empty")"
+            if [ "$newest" != "$TAG" ]; then
+              echo "$line stays on $newest"
+              continue
+            fi
+            # A release event checks out the release's tag, so GITHUB_SHA is its commit.
+            git tag --force --annotate "$line" --message "$line -> $TAG" "$GITHUB_SHA"
+            git push --force origin "refs/tags/$line"
+            echo "$line -> $TAG"
+          done

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Major and minor version tags for the GitHub Action: `@v0` and `@v0.1` follow
+  the newest release in their line and install that release of docker-lint, as
+  does `version: v0`
+
 ## [0.1.1] - 2026-10-24
 
 First published release. The Changed, Removed and Fixed sections describe

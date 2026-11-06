@@ -122,6 +122,9 @@ release, so nothing is public until a maintainer publishes it.
 6. Publishing the release runs the Image workflow, which pushes
    `ghcr.io/devblac/docker-lint` for linux/amd64 and linux/arm64. The first time,
    make the package public in its settings on GitHub; packages start out private.
+   It also runs the Version tags workflow, which moves the major and minor tags
+   (`v0`, `v0.1`) to the release when it is the newest in their line. Never push
+   those tags by hand.
 
 ## Questions?
 
