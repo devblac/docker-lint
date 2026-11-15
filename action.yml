@@ -1,4 +1,4 @@
-name: docker-lint
+name: docker-lint by devblac
 description: Lint Dockerfiles for anti-patterns, inefficiencies and security issues; annotates pull requests and outputs SARIF
 author: devblac
 branding:
