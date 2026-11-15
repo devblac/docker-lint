@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the newest release in their line and install that release of docker-lint, as
   does `version: v0`
 
+### Changed
+- The action is named "docker-lint by devblac" because the GitHub Marketplace
+  already lists another action called Docker Lint. Workflows keep using
+  `devblac/docker-lint`
+
 ## [0.1.1] - 2026-10-24
 
 First published release. The Changed, Removed and Fixed sections describe
