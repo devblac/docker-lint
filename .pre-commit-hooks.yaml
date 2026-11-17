@@ -2,7 +2,7 @@
 #
 #   repos:
 #     - repo: https://github.com/devblac/docker-lint
-#       rev: v0.1.1
+#       rev: v0.1.2
 #       hooks:
 #         - id: docker-lint          # builds docker-lint with Go
 #         # or
@@ -24,7 +24,7 @@
 - id: docker-lint-docker
   name: docker-lint (Docker)
   description: Lint Dockerfiles with the docker-lint container image; needs Docker but not Go.
-  entry: ghcr.io/devblac/docker-lint:0.1.1
+  entry: ghcr.io/devblac/docker-lint:0.1.2
   language: docker_image
   files: *dockerfiles
   exclude: *not-dockerfiles

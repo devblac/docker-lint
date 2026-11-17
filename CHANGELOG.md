@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-17
+
 ### Added
 - Major and minor version tags for the GitHub Action: `@v0` and `@v0.1` follow
   the newest release in their line and install that release of docker-lint, as
@@ -145,6 +147,7 @@ Tagged but never published. A review of the draft release found the problems
 fixed in 0.1.1, and the tag could not be moved because the Go module proxy had
 already cached it. Use 0.1.1 instead.
 
-[Unreleased]: https://github.com/devblac/docker-lint/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/devblac/docker-lint/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/devblac/docker-lint/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/devblac/docker-lint/releases/tag/v0.1.1
 [0.1.0]: https://github.com/devblac/docker-lint/tree/v0.1.0

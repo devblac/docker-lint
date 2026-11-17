@@ -25,7 +25,7 @@ Prebuilt binaries for Linux, macOS and Windows (amd64 and arm64) are attached to
 
 ```bash
 # Linux amd64; replace the version and platform as needed
-VERSION=0.1.1
+VERSION=0.1.2
 curl -sSLO "https://github.com/devblac/docker-lint/releases/download/v${VERSION}/docker-lint_${VERSION}_linux_amd64.tar.gz"
 curl -sSLO "https://github.com/devblac/docker-lint/releases/download/v${VERSION}/checksums.txt"
 sha256sum --check --ignore-missing checksums.txt
@@ -42,10 +42,10 @@ A 2.5 MB image (static binary on distroless, running as a non-root user) for lin
 
 ```bash
 # Lint from standard input
-docker run --rm -i ghcr.io/devblac/docker-lint:0.1.1 < Dockerfile
+docker run --rm -i ghcr.io/devblac/docker-lint:0.1.2 < Dockerfile
 
 # Lint every Dockerfile in the current directory
-docker run --rm -v "$PWD:/work" ghcr.io/devblac/docker-lint:0.1.1 .
+docker run --rm -v "$PWD:/work" ghcr.io/devblac/docker-lint:0.1.2 .
 ```
 
 ### pre-commit
@@ -55,7 +55,7 @@ Add to `.pre-commit-config.yaml` to lint staged Dockerfiles before each commit:
 ```yaml
 repos:
   - repo: https://github.com/devblac/docker-lint
-    rev: v0.1.1
+    rev: v0.1.2
     hooks:
       - id: docker-lint          # builds docker-lint with Go
       # - id: docker-lint-docker # or runs the container image (needs Docker, not Go)
@@ -315,7 +315,7 @@ the pull request diff with the findings:
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: devblac/docker-lint@v0.1.1
+- uses: devblac/docker-lint@v0.1.2
   with:
     dockerfile: Dockerfile
 ```
@@ -330,7 +330,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v7
-  - uses: devblac/docker-lint@v0.1.1
+  - uses: devblac/docker-lint@v0.1.2
     with:
       dockerfile: |
         Dockerfile
